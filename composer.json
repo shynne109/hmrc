@@ -1,0 +1,48 @@
+{
+    "name": "shynne109/hmrc",
+    "type": "library",
+    "description": "A library for HMRC",
+    "homepage": "https://github.com/shynne109/hmrc",
+    "license": "GPL-3.0-or-later",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "authors": [
+        {
+            "name": "Adedoyin Shina",
+            "email": "sbatch2016@gmail.com",
+            "homepage": "https://github.com/shynne109"
+        }
+    ],
+    "autoload": {
+        "psr-4": { "HMRC\\" : "src/" }
+    },
+    
+    "config": {
+        "optimize-autoloader": true,
+        "platform": {
+            "php": "8.0.28"
+        },
+        "sort-packages": true
+    },
+    "require": {
+        "php": "^8.0",
+        "ext-dom": "*",
+        "ext-mbstring": "*",
+        "ext-simplexml": "*",
+        "ext-xmlwriter": "*",
+        "ext-zlib": "*",
+        "guzzlehttp/guzzle": "^7.9",
+        "league/oauth2-client": "^2.8",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "phpspec/prophecy-phpunit": "^2.0",
+        "phpunit/phpunit": "^9.5.7",
+        "roave/security-advisories": "dev-latest",
+        "squizlabs/php_codesniffer": "^3.6.0"
+    },
+    "scripts": {
+        "lint:check": "phpcs --standard=PSR2 src",
+        "test": "XDEBUG_MODE=coverage phpunit --coverage-text"
+    }
+}

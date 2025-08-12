@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ServiceConfig>
+	<Service uri="http://www.govtalk.gov.uk/taxation/SA/SA800/24-25/1">
+		<TotalErrorCap>100</TotalErrorCap>
+		<ValidationType>COMPLETE</ValidationType>
+	</Service>
+</ServiceConfig>
+

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
+  <EnvelopeVersion>2.0</EnvelopeVersion>
+  <Header>
+    <MessageDetails>
+      <Class>HMRC-PAYE-RTI-NVR</Class>
+      <Qualifier>acknowledgement</Qualifier>
+      <TransactionID>192837465</TransactionID>
+      <CorrelationID>A1B2C3D4E5F60708</CorrelationID>
+      <Transformation>XML</Transformation>
+      <GatewayTest>1</GatewayTest>
+    </MessageDetails>
+  </Header>
+  <GovTalkDetails>
+  </GovTalkDetails>
+  <Body>
+    <Response>OK</Response>
+  </Body>
+</GovTalkMessage>

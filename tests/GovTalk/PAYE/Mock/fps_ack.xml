@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
+  <EnvelopeVersion>2.0</EnvelopeVersion>
+  <Header>
+    <MessageDetails>
+      <Class>HMRC-PAYE-RTI-FPS</Class>
+      <Qualifier>acknowledgement</Qualifier>
+      <TransactionID>123456789</TransactionID>
+      <CorrelationID>ABCDEF1234567890</CorrelationID>
+      <Transformation>XML</Transformation>
+      <GatewayTest>1</GatewayTest>
+    </MessageDetails>
+  </Header>
+  <GovTalkDetails>
+  </GovTalkDetails>
+  <Body>
+    <Response>OK</Response>
+  </Body>
+</GovTalkMessage>
