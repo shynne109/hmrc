@@ -422,7 +422,17 @@ class FPS extends GovTalk
         if (!empty($d['unpaidAbsence'])) {
             $xw->writeElement('UnpaidAbsence', 'yes');
         }
-        foreach (['smpYTD' => 'SMPYTD', 'sppYTD' => 'SPPYTD', 'sapYTD' => 'SAPYTD', 'shppYTD' => 'ShPPYTD', 'spbpYTD' => 'SPBPYTD', 'sncPYTD' => 'SNCPYTD'] as $k => $el) {
+        // YTD statutory/shared parental pay style elements. Accept multiple key casings (e.g. shPPYTD vs shppYTD)
+        $ytdMap = [
+            'smpYTD' => 'SMPYTD',
+            'sppYTD' => 'SPPYTD',
+            'sapYTD' => 'SAPYTD',
+            'shppYTD' => 'ShPPYTD', // primary expected key
+            'shPPYTD' => 'ShPPYTD', // tolerate alternative camel-case used in some tests
+            'spbpYTD' => 'SPBPYTD',
+            'sncPYTD' => 'SNCPYTD',
+        ];
+        foreach ($ytdMap as $k => $el) {
             if (isset($d[$k])) {
                 $xw->writeElement($el, number_format($d[$k], 2, '.', ''));
             }
@@ -532,10 +542,11 @@ class FPS extends GovTalk
 
         if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
             $returnable                  = $this->getResponseEndpoint();
-            $returnable['correlation_id'] = $this->getResponseCorrelationId();
         } else {
             $returnable = ['errors' => $this->getResponseErrors()];
         }
+        $returnable['correlation_id'] = $this->getResponseCorrelationId();
+            
         $returnable['request_xml']     = $this->getFullXMLRequest();
         $returnable['response_xml']    = $this->getFullXMLResponse();
         $returnable['qualifier']    = $this->getResponseQualifier();
