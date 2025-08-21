@@ -467,12 +467,14 @@ class GovTalk implements LoggerAwareInterface
      */
     public function getResponseErrors()
     {
+        
         if ($this->responseHasErrors()) {
             $errorArray = array(
                 'fatal' => array(),
                 'recoverable' => array(),
                 'business' => array(),
-                'warning' => array()
+                'warning' => array(),
+                'schema' => array()
             );
             foreach ($this->fullResponseObject->GovTalkDetails->GovTalkErrors->Error as $responseError) {
                 $errorDetails = array(
@@ -483,6 +485,21 @@ class GovTalk implements LoggerAwareInterface
                     $errorDetails['location'] = (string) $responseError->Location;
                 }
                 $errorArray[(string) $responseError->Type][] = $errorDetails;
+            }
+            if(isset($this->fullResponseObject->Body->ErrorResponse)){
+                foreach ($this->fullResponseObject->Body->ErrorResponse->Error as $responseError) {
+                    $errorDetails = array(
+                        'number' => (string) $responseError->Number,
+                        'text' => (string) $responseError->Text
+                    );
+                    if (isset($responseError->Application->Messages->DeveloperMessage)) {
+                        $errorDetails['developerMessage'] = (string)$responseError->Application->Messages->DeveloperMessage;
+                    }
+                    if (isset($responseError->Location) && (string)$responseError->Location !== '') {
+                        $errorDetails['location'] = (string)$responseError->Location;
+                    }
+                    $errorArray[(string)$responseError->Type][] = $errorDetails;
+                }
             }
             return $errorArray;
         } else {
