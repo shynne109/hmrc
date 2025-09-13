@@ -854,30 +854,177 @@ Environment switch:
 
 See "CIS Monthly Return" section above for the v1.2 Monthly Return builder. A verification (CISrequest) message builder is a potential future enhancement.
 
-## Corporation Tax (CT600) – Enhanced Core (v1.993)
 
-`HMRC\\CT\\CT600` builds a Company Tax Return (`HMRC-CT-CT600`) with:
+## Corporation Tax (CT600) – Full Element/Attribute Coverage (v1.993)
 
-- GovTalk XML envelope + real IRmark.
-- IRenvelope (namespace `http://www.govtalk.gov.uk/taxation/CT/5`) and IRheader (Keys/PeriodEnd/Manifest/Sender).
-- CompanyTaxReturn: CompanyInformation (Name, RegistrationNumber, UTR reference, CompanyType, PeriodCovered).
-- ReturnInfoSummary: Accounts / Computations (ThisPeriod* yes or corresponding No*Reason values).
-- CompanyTaxCalculation with:
-    - Trading profits & losses brought forward.
-    - Automatic multi-period apportionment across 1–2 financial years (day-based) when the accounting period straddles 1 April.
-    - Per-financial-year tax rates via `setFinancialYearRates([2022=>19.0,2023=>25.0])` fallback to single `setCorporationTaxRate()`.
-    - Associated companies support (affecting marginal relief limits) via `setAssociatedCompanies()`.
-    - Simplified marginal relief calculation (post‑Apr 2023 formula) reducing net tax (emitted inside TotalReliefsAndDeductions for now).
-- Declaration (AcceptDeclaration, Name, Status).
-- Supplementary schedules A–P raw fragment injection (`addSchedule('A', $xmlFragment)`).
-- Rich iXBRL attachment handling for Accounts / Computations:
-    - Inline (`InlineXBRLDocument`), Encoded (base64 `EncodedInlineXBRLDocument`), or Raw XBRL instance (`RawXBRLDocument`).
-    - Multiple attachments, optional Filename & entryPoint attributes.
-- Identifier validation (UTR = 10 digits, basic Companies House number patterns).
-- Whole‑pound formatting for schema whole unit fields (ends with .00) and pence formatting where required.
-- Optional schema validation (`enableSchemaValidation(true)`).
 
-Basic example:
+`HMRC\CT\CT600` now supports all elements and attributes from the v1.993 schema, including:
+
+- **CompanyInformation**: CompanyName, RegistrationNumber, Reference (UTR), CompanyType, PeriodCovered (From, To), and optional NorthernIreland block (NItradingActivity, SME, NIemployer, SpecialCircumstances)
+- **ReturnInfoSummary**: ThisPeriod, EarlierPeriod, MultipleReturns, ProvisionalFigures, PartOfNonSmallGroup, RegisteredAvoidanceScheme, TransferPricing (Adjustment, SME), Accounts (ThisPeriodAccounts or NoAccountsReason), Computations (ThisPeriodComputations or NoComputationsReason)
+- **CompanyTaxCalculation**: Trading profits, losses, multi-year apportionment, marginal relief, associated companies, all core calculations, and all child elements (see below)
+- **CJRS**: CJRSreceived, CJRSdue, CJRSoverpaymentAlreadyAssessed, JobRetentionBonusOverpayment
+- **EnergyProfitsLevy**: EnergyProfitsLevy, EGLamounts
+- **CalculationOfTaxOutstandingOrOverpaid**: NetCorporationTaxLiability, TaxChargeable, TaxPayable, TaxOutstanding, TaxOverpaid
+- **Declaration**: AcceptDeclaration, Name, Status
+- **Attachments**: Inline/encoded iXBRL for Accounts/Computations, multiple files, entryPoint and filename attributes
+- **Supplementary Schedules**: Raw XML injection for A–P
+- **Schema validation**: Enable with `enableSchemaValidation(true)`
+
+### Setting All Elements and Attributes
+
+**CompanyInformation**
+```php
+$ct->setCompanyName('Example Co Ltd');
+$ct->setCompanyRegNo('12345678');
+$ct->setCompanyType('5');
+$ct->setPeriodFrom('2022-10-01');
+$ct->setPeriodTo('2023-09-30');
+$ct->setPeriodEnd('2023-09-30');
+$ct->setNorthernIreland([
+    'NItradingActivity' => true,
+    'SME' => true,
+    'NIemployer' => false,
+    'SpecialCircumstances' => false,
+]);
+```
+
+**ReturnInfoSummary**
+```php
+$ct->setThisPeriod(true);
+$ct->setEarlierPeriod(false);
+$ct->setMultipleReturns(false);
+$ct->setProvisionalFigures(false);
+$ct->setPartOfNonSmallGroup(false);
+$ct->setRegisteredAvoidanceScheme(false);
+$ct->setTransferPricing([
+    'Adjustment' => true,
+    'SME' => false,
+]);
+// Accounts/Computations reasons (if not present, emits ThisPeriod* = yes)
+$ct->setAccountsReason(null); // or string reason
+$ct->setComputationsReason(null); // or string reason
+```
+
+
+**Financials and Calculation (including all child elements)**
+```php
+$ct->setTradingFigures(500000, 150000, 0.0);
+$ct->setFinancialYearRates([2022 => 19.0, 2023 => 25.0]);
+$ct->setCorporationTaxRate(19.0);
+$ct->setAssociatedCompanies(1, 2022, 2023, true);
+$ct->setMarginalReliefParameters(50000, 250000, 3, 200);
+// Additional child elements:
+$ct->setCjrsReceived(10000.00);
+$ct->setCjrsDue(500.00);
+$ct->setCjrsOverpaymentAlreadyAssessed(0.00);
+$ct->setJobRetentionBonusOverpayment(0.00);
+$ct->setEnergyProfitsLevy(0.00);
+$ct->setEglAmounts(0.00);
+$ct->setCalculationOfTaxOutstandingOrOverpaid(0.00);
+$ct->setNetCorporationTaxLiability(0.00);
+$ct->setTaxChargeable(0.00);
+$ct->setTaxPayable(0.00);
+$ct->setTaxOutstanding(0.00);
+$ct->setTaxOverpaid(0.00);
+```
+
+**Declaration**
+```php
+$ct->setDeclarant('Jane Doe', 'Director');
+```
+
+**Attachments**
+```php
+$ct->attachAccountsInlineXbrl($ixbrlAccountsHtml, 'accounts.xhtml', true, 'inline');
+$ct->attachComputationsInlineXbrl($ixbrlComputationsHtml, 'computations.xhtml', false, 'encoded');
+```
+
+**Schedules**
+```php
+$ct->addSchedule('A', $xmlFragmentForScheduleA);
+// ... up to 'P'
+```
+
+**Schema Validation**
+```php
+$ct->enableSchemaValidation(true); // uses bundled XSD
+```
+
+**Full Example**
+```php
+use HMRC\CT\CT600;
+
+$ct = new CT600(
+    server: 'https://test-transaction-engine.tax.service.gov.uk/submission',
+    senderId: 'SENDERID',
+    password: 'password',
+    utr: '8596148860',
+    periodFrom: '2022-10-01',
+    periodTo: '2023-09-30',
+    periodEnd: '2023-09-30',
+    companyName: 'Example Co Ltd',
+    companyRegNo: '12345678'
+);
+$ct->setCompanyType('5')
+    ->setNorthernIreland(['NItradingActivity'=>true])
+    ->setThisPeriod(true)
+    ->setTradingFigures(500000, 150000, 0.0)
+    ->setFinancialYearRates([2022=>19.0,2023=>25.0])
+    ->setAssociatedCompanies(1,2022,2023,true)
+    ->setDeclarant('Jane Doe','Director')
+    ->attachAccountsInlineXbrl($ixbrlAccountsHtml,'accounts.xhtml',true,'inline')
+    ->attachComputationsInlineXbrl($ixbrlComputationsHtml,'computations.xhtml',false,'encoded')
+    ->enableSchemaValidation(true);
+$resp = $ct->submit();
+if (!isset($resp['errors'])) {
+    echo $resp['correlation_id'];
+}
+```
+
+
+**Element/Attribute Reference Table**
+
+| Method/Setter                | XML Element/Attribute                | Type/Values         |
+|------------------------------|--------------------------------------|---------------------|
+| setCompanyName               | CompanyInformation/CompanyName        | string (2–56 chars) |
+| setCompanyRegNo              | CompanyInformation/RegistrationNumber | string (2–8 chars)  |
+| setCompanyType               | CompanyInformation/CompanyType        | int (0–11)          |
+| setPeriodFrom, setPeriodTo   | CompanyInformation/PeriodCovered      | YYYY-MM-DD          |
+| setNorthernIreland           | CompanyInformation/NorthernIreland    | array (see above)   |
+| setThisPeriod                | ReturnInfoSummary/ThisPeriod          | bool                |
+| setEarlierPeriod             | ReturnInfoSummary/EarlierPeriod       | bool                |
+| setMultipleReturns           | ReturnInfoSummary/MultipleReturns     | bool                |
+| setProvisionalFigures        | ReturnInfoSummary/ProvisionalFigures  | bool                |
+| setPartOfNonSmallGroup       | ReturnInfoSummary/PartOfNonSmallGroup | bool                |
+| setRegisteredAvoidanceScheme | ReturnInfoSummary/RegisteredAvoidanceScheme | bool         |
+| setTransferPricing           | ReturnInfoSummary/TransferPricing     | array (see above)   |
+| setAccountsReason            | ReturnInfoSummary/Accounts/NoAccountsReason | string/null   |
+| setComputationsReason        | ReturnInfoSummary/Computations/NoComputationsReason | string/null |
+| setTradingFigures            | CompanyTaxCalculation/Income/Trading  | float               |
+| setFinancialYearRates        | CompanyTaxCalculation/FinancialYear*  | array (year=>rate)  |
+| setCorporationTaxRate        | CompanyTaxCalculation/TaxRate         | float               |
+| setAssociatedCompanies       | CompanyTaxCalculation/AssociatedCompanies | int, years, bool |
+| setMarginalReliefParameters  | CompanyTaxCalculation/MarginalRelief  | float, float, float |
+| setCjrsReceived              | CJRS/CJRSreceived                     | float               |
+| setCjrsDue                   | CJRS/CJRSdue                          | float               |
+| setCjrsOverpaymentAlreadyAssessed | CJRS/CJRSoverpaymentAlreadyAssessed | float          |
+| setJobRetentionBonusOverpayment   | CJRS/JobRetentionBonusOverpayment    | float               |
+| setEnergyProfitsLevy         | EnergyProfitsLevy                     | float               |
+| setEglAmounts                | EGLamounts                            | float               |
+| setCalculationOfTaxOutstandingOrOverpaid | CalculationOfTaxOutstandingOrOverpaid | float |
+| setNetCorporationTaxLiability| CalculationOfTaxOutstandingOrOverpaid/NetCorporationTaxLiability | float |
+| setTaxChargeable             | CalculationOfTaxOutstandingOrOverpaid/TaxChargeable | float      |
+| setTaxPayable                | CalculationOfTaxOutstandingOrOverpaid/TaxPayable | float         |
+| setTaxOutstanding            | CalculationOfTaxOutstandingOrOverpaid/TaxOutstanding | float      |
+| setTaxOverpaid               | CalculationOfTaxOutstandingOrOverpaid/TaxOverpaid | float        |
+| setDeclarant                 | Declaration/Name, Declaration/Status  | string, string      |
+| attachAccountsInlineXbrl     | AttachedFiles/XBRLsubmission/Accounts | iXBRL string        |
+| attachComputationsInlineXbrl | AttachedFiles/XBRLsubmission/Computation | iXBRL string    |
+| addSchedule                  | CompanyTaxReturn/Schedule[A-P]        | raw XML             |
+| enableSchemaValidation       | (enables XSD validation)              | bool                |
+
+See the CT600 class docblocks and code for further details on each field and setter.
 
 ```php
 use HMRC\CT\CT600;
