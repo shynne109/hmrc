@@ -224,7 +224,6 @@ class CT600LocalServerTest extends \PHPUnit\Framework\TestCase
         $this->assertStringContainsString('<TaxChargeable>52800.90</TaxChargeable>', $requestXml);
         // Skip elements that may require complex schema hierarchy
         // $this->assertStringContainsString('<TaxChargeable>52800.90</TaxChargeable>', $requestXml);
-        
         // Comprehensive attachments verification
         $this->assertStringContainsString('<AttachedFiles>', $requestXml);
         $this->assertStringContainsString('<EncodedInlineXBRLDocument', $requestXml);
