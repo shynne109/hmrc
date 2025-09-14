@@ -16,6 +16,10 @@ use HMRC\GovTalk;
  */
 class CT600 extends GovTalk
 {
+    private string $devEndpoint  = 'https://test-transaction-engine.tax.service.gov.uk/submission';
+    private string $liveEndpoint = 'https://transaction-engine.tax.service.gov.uk/submission';
+    private bool $testMode = false;
+    private ?string $customTestEndpoint = null;
     // Core company and period fields
     private string $utr;
     private string $periodEnd;
@@ -77,7 +81,6 @@ class CT600 extends GovTalk
     private float $corporationTaxRate = 19.0;
     private array $financialYearRates = [];
 
-    // --- Additional deeply nested and child elements (examples, expand as needed) ---
     private float $cjrsReceived = 0.0;
     private float $cjrsDue = 0.0;
     private float $cjrsOverpaymentAlreadyAssessed = 0.0;
@@ -90,7 +93,28 @@ class CT600 extends GovTalk
     private float $taxPayable = 0.0;
     private float $taxOutstanding = 0.0;
     private float $taxOverpaid = 0.0;
-    // ...add more as needed for full schema coverage...
+    private ?string $taxOfficeNumber = null;
+    private ?string $taxOfficeReference = null;
+    private ?string $dateSent = null;
+    private ?string $taxpayerName = null;
+    private ?string $principalBusinessActivity = null;
+    private ?array $agentDetails = null;
+    private ?array $authentication = null;
+    private ?array $companyAddress = null;
+    private ?array $taxOffice = null;
+    private ?array $shares = null;
+    private ?array $contactDetails = null;
+    private ?string $significantEvent = null;
+    private ?float $lossesCarriedBackSummary = null;
+    private ?float $lossesCarriedForwardSummary = null;
+    private ?float $groupReliefClaimed = null;
+    private ?string $noTaxLiabilityReason = null;
+    private ?array $ringFenceCalculation = null;
+    private ?array $northernIrelandCalculation = null;
+    private ?array $lossesAndDeficits = null;
+    private ?float $communityInvestmentRelief = null;
+    private ?float $otherReliefs = null;
+    private ?array $otherAttachments = null;
 
     // Setters for new child/nested elements
     public function setCjrsReceived(float $v): self { $this->cjrsReceived = $v; return $this; }
@@ -144,6 +168,10 @@ class CT600 extends GovTalk
     private ?float $mrUpperLimit = 250000.0;
     private float $mrFractionNumerator = 3.0;
     private float $mrFractionDenominator = 200.0;
+    // Vendor/product information
+    private string $vendorId = '';
+    private string $productName = '';
+    private string $productVersion = '';
     // Attachments, schedules, schema
     private bool $enableSchemaValidation = false;
     private ?string $localSchemaPath = null;
@@ -169,12 +197,36 @@ class CT600 extends GovTalk
      * Set TransferPricing subfields (all optional, pass as array: ['Adjustment'=>bool, 'SME'=>bool])
      */
     public function setTransferPricing(?array $tp): self { $this->transferPricing = $tp; return $this; }
+    
+    // Setters for newly declared properties
+    public function setTaxOfficeNumber(?string $v): self { $this->taxOfficeNumber = $v; return $this; }
+    public function setTaxOfficeReference(?string $v): self { $this->taxOfficeReference = $v; return $this; }
+    public function setDateSent(?string $v): self { $this->dateSent = $v; return $this; }
+    public function setTaxpayerName(?string $v): self { $this->taxpayerName = $v; return $this; }
+    public function setPrincipalBusinessActivity(?string $v): self { $this->principalBusinessActivity = $v; return $this; }
+    public function setAgentDetails(?array $v): self { $this->agentDetails = $v; return $this; }
+    public function setAuthentication(?array $v): self { $this->authentication = $v; return $this; }
+    public function setCompanyAddress(?array $v): self { $this->companyAddress = $v; return $this; }
+    public function setTaxOffice(?array $v): self { $this->taxOffice = $v; return $this; }
+    public function setShares(?array $v): self { $this->shares = $v; return $this; }
+    public function setContactDetails(?array $v): self { $this->contactDetails = $v; return $this; }
+    public function setSignificantEvent(?string $v): self { $this->significantEvent = $v; return $this; }
+    public function setLossesCarriedBackSummary(?float $v): self { $this->lossesCarriedBackSummary = $v; return $this; }
+    public function setLossesCarriedForwardSummary(?float $v): self { $this->lossesCarriedForwardSummary = $v; return $this; }
+    public function setGroupReliefClaimed(?float $v): self { $this->groupReliefClaimed = $v; return $this; }
+    public function setNoTaxLiabilityReason(?string $v): self { $this->noTaxLiabilityReason = $v; return $this; }
+    public function setRingFenceCalculation(?array $v): self { $this->ringFenceCalculation = $v; return $this; }
+    public function setNorthernIrelandCalculation(?array $v): self { $this->northernIrelandCalculation = $v; return $this; }
+    public function setLossesAndDeficits(?array $v): self { $this->lossesAndDeficits = $v; return $this; }
+    public function setCommunityInvestmentRelief(?float $v): self { $this->communityInvestmentRelief = $v; return $this; }
+    public function setOtherReliefs(?float $v): self { $this->otherReliefs = $v; return $this; }
+    public function setOtherAttachments(?array $v): self { $this->otherAttachments = $v; return $this; }
     /**
      * Flag indicating if the IRmark should be generated for outgoing XML.
      *
      * @var boolean
      */
-    private $generateIRmark = true;
+    private bool $generateIRmark = true;
 
     public const MESSAGE_CLASS = 'HMRC-CT-CT600';
     private const NS = 'http://www.govtalk.gov.uk/taxation/CT/5';
@@ -190,7 +242,8 @@ class CT600 extends GovTalk
         string $companyName,
         string $companyRegNo
     ) {
-        parent::__construct($server, $senderId, $password);
+        $endpoint = $this->resolveEndpoint($server);
+        parent::__construct($endpoint, $senderId, $password);
         $this->utr = $utr;
         $this->periodFrom = $periodFrom;
         $this->periodTo = $periodTo;
@@ -198,8 +251,39 @@ class CT600 extends GovTalk
         $this->companyName = $companyName;
         $this->companyRegNo = $companyRegNo;
         $this->setMessageAuthentication('clear');
-        $this->setTestFlag(true);
+        $this->setTestFlag($this->testMode);
         $this->addMessageKey('UTR', $utr);
+    }
+    
+    /**
+     * Set custom test endpoint
+     *
+     * @param string|null $endpoint
+     * @return self
+     */
+    public function setCustomTestEndpoint(?string $endpoint): self
+    {
+        $this->customTestEndpoint = $endpoint;
+        return $this;
+    }
+    
+    /**
+     * Resolve the endpoint URL based on test mode and custom endpoint
+     *
+     * @param string|null $server Optional server override
+     * @return string
+     */
+    private function resolveEndpoint(?string $server = null): string
+    {
+        if ($server) {
+            return $server;
+        }
+        
+        if ($this->testMode) {
+            return $this->customTestEndpoint ?: $this->devEndpoint;
+        }
+        
+        return $this->liveEndpoint;
     }
 
     public function setReturnType(string $type): self
@@ -260,6 +344,22 @@ class CT600 extends GovTalk
         $this->mrUpperLimit = $upper;
         $this->mrFractionNumerator = $num;
         $this->mrFractionDenominator = $den;
+        return $this;
+    }
+    
+    /**
+     * Set software vendor metadata
+     *
+     * @param string $vendorId HMRC-assigned vendor ID
+     * @param string $productName Product name
+     * @param string $productVersion Product version
+     * @return self
+     */
+    public function setSoftwareMeta(string $vendorId, string $productName, string $productVersion): self
+    {
+        $this->vendorId = $vendorId;
+        $this->productName = $productName;
+        $this->productVersion = $productVersion;
         return $this;
     }
     public function attachAccountsInlineXbrl(string $ixbrl, ?string $filename = null, bool $entryPoint = false, string $mode = 'inline'): self
@@ -351,9 +451,70 @@ class CT600 extends GovTalk
         $xw->writeAttribute('Type', 'UTR');
         $xw->text($this->utr);
         $xw->endElement(); // Key
+        // NEW: Additional Key types (e.g., TaxOfficeNumber, TaxOfficeReference)
+        if (!empty($this->taxOfficeNumber)) {
+            $xw->startElement('Key');
+            $xw->writeAttribute('Type', 'TaxOfficeNumber');
+            $xw->text($this->taxOfficeNumber);
+            $xw->endElement();
+        }
+        if (!empty($this->taxOfficeReference)) {
+            $xw->startElement('Key');
+            $xw->writeAttribute('Type', 'TaxOfficeReference');
+            $xw->text($this->taxOfficeReference);
+            $xw->endElement();
+        }
         $xw->endElement(); // Keys
         $xw->writeElement('PeriodEnd', $this->periodEnd);
         $xw->writeElement('DefaultCurrency', 'GBP');
+        // NEW: DateSent
+        if (!empty($this->dateSent)) {
+            $xw->writeElement('DateSent', $this->dateSent);
+        }
+        // NEW: TaxpayerName
+        if (!empty($this->taxpayerName)) {
+            $xw->writeElement('TaxpayerName', $this->taxpayerName);
+        }
+        // NEW: PrincipalBusinessActivity
+        if (!empty($this->principalBusinessActivity)) {
+            $xw->writeElement('PrincipalBusinessActivity', $this->principalBusinessActivity);
+        }
+        // NEW: AgentDetails
+        if (!empty($this->agentDetails)) {
+            $xw->startElement('AgentDetails');
+            if (!empty($this->agentDetails['AgentName'])) {
+                $xw->writeElement('AgentName', $this->agentDetails['AgentName']);
+            }
+            if (!empty($this->agentDetails['AgentAddress'])) {
+                $xw->startElement('AgentAddress');
+                $xw->writeElement('AddressLine1', $this->agentDetails['AgentAddress']['AddressLine1']);
+                if (!empty($this->agentDetails['AgentAddress']['AddressLine2'])) {
+                    $xw->writeElement('AddressLine2', $this->agentDetails['AgentAddress']['AddressLine2']);
+                }
+                $xw->writeElement('City', $this->agentDetails['AgentAddress']['City']);
+                if (!empty($this->agentDetails['AgentAddress']['PostCode'])) {
+                    $xw->writeElement('PostCode', $this->agentDetails['AgentAddress']['PostCode']);
+                }
+                $xw->writeElement('Country', $this->agentDetails['AgentAddress']['Country']);
+                $xw->endElement(); // AgentAddress
+            }
+            if (!empty($this->agentDetails['AgentPhone'])) {
+                $xw->writeElement('AgentPhone', $this->agentDetails['AgentPhone']);
+            }
+            if (!empty($this->agentDetails['AgentActingCapacity'])) {
+                $xw->writeElement('AgentActingCapacity', $this->agentDetails['AgentActingCapacity']);
+            }
+            $xw->endElement(); // AgentDetails
+        }
+        // NEW: Authentication
+        if (!empty($this->authentication)) {
+            $xw->startElement('Authentication');
+            $xw->writeElement('Method', $this->authentication['Method']);
+            if (!empty($this->authentication['Role'])) {
+                $xw->writeElement('Role', $this->authentication['Role']);
+            }
+            $xw->endElement(); // Authentication
+        }
         $xw->startElement('Manifest');
         $xw->startElement('Contains');
         $xw->startElement('Reference');
@@ -377,7 +538,56 @@ class CT600 extends GovTalk
         $xw->writeElement('RegistrationNumber', $this->companyRegNo);
         $xw->writeElement('Reference', $this->utr);
         $xw->writeElement('CompanyType', $this->companyType);
-        // NorthernIreland block (optional)
+        // NEW: CompanyAddress
+        if (!empty($this->companyAddress)) {
+            $xw->startElement('CompanyAddress');
+            $xw->writeElement('AddressLine1', $this->companyAddress['AddressLine1']);
+            if (!empty($this->companyAddress['AddressLine2'])) {
+                $xw->writeElement('AddressLine2', $this->companyAddress['AddressLine2']);
+            }
+            $xw->writeElement('City', $this->companyAddress['City']);
+            if (!empty($this->companyAddress['PostCode'])) {
+                $xw->writeElement('PostCode', $this->companyAddress['PostCode']);
+            }
+            $xw->writeElement('Country', $this->companyAddress['Country']);
+            $xw->endElement(); // CompanyAddress
+        }
+        // NEW: TaxOffice
+        if (!empty($this->taxOffice)) {
+            $xw->startElement('TaxOffice');
+            if (!empty($this->taxOffice['TaxOfficeNumber'])) {
+                $xw->writeElement('TaxOfficeNumber', $this->taxOffice['TaxOfficeNumber']);
+            }
+            if (!empty($this->taxOffice['TaxOfficeReference'])) {
+                $xw->writeElement('TaxOfficeReference', $this->taxOffice['TaxOfficeReference']);
+            }
+            $xw->endElement(); // TaxOffice
+        }
+        // NEW: Shares
+        if (!empty($this->shares)) {
+            $xw->startElement('Shares');
+            foreach ($this->shares as $share) {
+                $xw->startElement('ShareClass');
+                $xw->writeElement('Class', $share['Class']);
+                $xw->writeElement('Number', (string)$share['Number']);
+                $xw->writeElement('NominalValue', $this->money($share['NominalValue']));
+                $xw->endElement(); // ShareClass
+            }
+            $xw->endElement(); // Shares
+        }
+        // NEW: ContactDetails
+        if (!empty($this->contactDetails)) {
+            $xw->startElement('ContactDetails');
+            $xw->writeElement('Name', $this->contactDetails['Name']);
+            if (!empty($this->contactDetails['Telephone'])) {
+                $xw->writeElement('Telephone', $this->contactDetails['Telephone']);
+            }
+            if (!empty($this->contactDetails['Email'])) {
+                $xw->writeElement('Email', $this->contactDetails['Email']);
+            }
+            $xw->endElement(); // ContactDetails
+        }
+        // NorthernIreland block (already handled)
         if ($this->northernIreland) {
             $ni = $this->northernIreland;
             $xw->startElement('NorthernIreland');
@@ -407,6 +617,26 @@ class CT600 extends GovTalk
             if (!empty($tp['SME'])) $xw->writeElement('SME', 'yes');
             $xw->endElement();
         }
+        // NEW: SignificantEvent
+        if (!empty($this->significantEvent)) {
+            $xw->writeElement('SignificantEvent', $this->significantEvent);
+        }
+        // NEW: LossesCarriedBack
+        if (!empty($this->lossesCarriedBackSummary)) {
+            $xw->writeElement('LossesCarriedBack', $this->wholeMoney($this->lossesCarriedBackSummary));
+        }
+        // NEW: LossesCarriedForward
+        if (!empty($this->lossesCarriedForwardSummary)) {
+            $xw->writeElement('LossesCarriedForward', $this->wholeMoney($this->lossesCarriedForwardSummary));
+        }
+        // NEW: GroupReliefClaimed
+        if (!empty($this->groupReliefClaimed)) {
+            $xw->writeElement('GroupReliefClaimed', $this->wholeMoney($this->groupReliefClaimed));
+        }
+        // NEW: NoTaxLiabilityReason
+        if (!empty($this->noTaxLiabilityReason)) {
+            $xw->writeElement('NoTaxLiabilityReason', $this->noTaxLiabilityReason);
+        }
         $xw->startElement('Accounts');
         if ($this->accountsReason === null) {
             $xw->writeElement('ThisPeriodAccounts', 'yes');
@@ -428,43 +658,72 @@ class CT600 extends GovTalk
         $xw->endElement();
 
         [$calc, $tax, $marginalRelief] = $this->computeTaxBreakdown();
-    $xw->startElement('CompanyTaxCalculation');
-    $xw->startElement('Income');
-    $xw->startElement('Trading');
-    $xw->writeElement('Profits', $this->wholeMoney($this->tradingProfits));
-    $xw->writeElement('LossesBroughtForward', $this->wholeMoney($this->lossesBroughtForward));
-    $xw->writeElement('NetProfits', $this->wholeMoney($this->tradingProfits - $this->lossesBroughtForward));
-    $xw->endElement(); // Trading
-    $xw->writeElement('NonTradingLoanProfitsAndGains', $this->wholeMoney($this->nonTradingLoanProfitsAndGains));
-    $xw->writeElement('IncomeStatedNet', $this->wholeMoney($this->incomeStatedNet));
-    $xw->writeElement('NonLoanAnnuitiesAnnualPaymentsDiscounts', $this->wholeMoney($this->nonLoanAnnuitiesAnnualPaymentsDiscounts));
-    $xw->writeElement('NonUKdividends', $this->wholeMoney($this->nonUKdividends));
-    $xw->writeElement('DeductedIncome', $this->wholeMoney($this->deductedIncome));
-    $xw->writeElement('PropertyBusinessIncome', $this->wholeMoney($this->propertyBusinessIncome));
-    $xw->writeElement('NonTradingGainsIntangibles', $this->wholeMoney($this->nonTradingGainsIntangibles));
-    $xw->writeElement('TonnageTaxProfits', $this->wholeMoney($this->tonnageTaxProfits));
-    $xw->writeElement('OtherIncome', $this->wholeMoney($this->otherIncome));
-    $xw->endElement(); // Income
-    $xw->writeElement('ChargeableGains', $this->wholeMoney($this->chargeableGains));
-    $xw->writeElement('GrossGains', $this->wholeMoney($this->grossGains));
-    $xw->writeElement('AllowableLosses', $this->wholeMoney($this->allowableLosses));
-    $xw->writeElement('NetChargeableGains', $this->wholeMoney($this->netChargeableGains));
-    $xw->writeElement('NonTradeDeficitsOnLoans', $this->wholeMoney($this->nonTradeDeficitsOnLoans));
-    $xw->writeElement('CapitalAllowances', $this->wholeMoney($this->capitalAllowances));
-    $xw->writeElement('ManagementExpenses', $this->wholeMoney($this->managementExpenses));
-    $xw->writeElement('UKpropertyBusinessLosses', $this->wholeMoney($this->ukPropertyBusinessLosses));
-    $xw->writeElement('NonTradeDeficits', $this->wholeMoney($this->nonTradeDeficits));
-    $xw->writeElement('CarriedForwardNonTradeDeficits', $this->wholeMoney($this->carriedForwardNonTradeDeficits));
-    $xw->writeElement('NonTradingLossIntangibles', $this->wholeMoney($this->nonTradingLossIntangibles));
-    $xw->writeElement('TradingLosses', $this->wholeMoney($this->tradingLosses));
-    $xw->writeElement('TradingLossesCarriedBack', $this->wholeMoney($this->tradingLossesCarriedBack));
-    $xw->writeElement('TradingLossesCarriedForward', $this->wholeMoney($this->tradingLossesCarriedForward));
-    $xw->writeElement('NonTradeCapitalAllowances', $this->wholeMoney($this->nonTradeCapitalAllowances));
-    $xw->writeElement('QualifyingDonations', $this->wholeMoney($this->qualifyingDonations));
-    $xw->writeElement('GroupRelief', $this->wholeMoney($this->groupRelief));
-    $xw->writeElement('GroupReliefForCarriedForwardLosses', $this->wholeMoney($this->groupReliefForCarriedForwardLosses));
-    $xw->writeElement('RingFenceProfitsIncluded', $this->wholeMoney($this->ringFenceProfitsIncluded));
-    $xw->writeElement('NorthernIrelandProfitsIncluded', $this->wholeMoney($this->northernIrelandProfitsIncluded));
+        $xw->startElement('CompanyTaxCalculation');
+        $xw->startElement('Income');
+        $xw->startElement('Trading');
+        $xw->writeElement('Profits', $this->wholeMoney($this->tradingProfits));
+        $xw->writeElement('LossesBroughtForward', $this->wholeMoney($this->lossesBroughtForward));
+        $xw->writeElement('NetProfits', $this->wholeMoney($this->tradingProfits - $this->lossesBroughtForward));
+        $xw->endElement(); // Trading
+        $xw->writeElement('NonTradingLoanProfitsAndGains', $this->wholeMoney($this->nonTradingLoanProfitsAndGains));
+        $xw->writeElement('IncomeStatedNet', $this->wholeMoney($this->incomeStatedNet));
+        $xw->writeElement('NonLoanAnnuitiesAnnualPaymentsDiscounts', $this->wholeMoney($this->nonLoanAnnuitiesAnnualPaymentsDiscounts));
+        $xw->writeElement('NonUKdividends', $this->wholeMoney($this->nonUKdividends));
+        $xw->writeElement('DeductedIncome', $this->wholeMoney($this->deductedIncome));
+        $xw->writeElement('PropertyBusinessIncome', $this->wholeMoney($this->propertyBusinessIncome));
+        $xw->writeElement('NonTradingGainsIntangibles', $this->wholeMoney($this->nonTradingGainsIntangibles));
+        $xw->writeElement('TonnageTaxProfits', $this->wholeMoney($this->tonnageTaxProfits));
+        $xw->writeElement('OtherIncome', $this->wholeMoney($this->otherIncome));
+        $xw->endElement(); // Income
+        $xw->writeElement('ChargeableGains', $this->wholeMoney($this->chargeableGains));
+        $xw->writeElement('GrossGains', $this->wholeMoney($this->grossGains));
+        $xw->writeElement('AllowableLosses', $this->wholeMoney($this->allowableLosses));
+        $xw->writeElement('NetChargeableGains', $this->wholeMoney($this->netChargeableGains));
+        $xw->writeElement('NonTradeDeficitsOnLoans', $this->wholeMoney($this->nonTradeDeficitsOnLoans));
+        $xw->writeElement('CapitalAllowances', $this->wholeMoney($this->capitalAllowances));
+        $xw->writeElement('ManagementExpenses', $this->wholeMoney($this->managementExpenses));
+        $xw->writeElement('UKpropertyBusinessLosses', $this->wholeMoney($this->ukPropertyBusinessLosses));
+        $xw->writeElement('NonTradeDeficits', $this->wholeMoney($this->nonTradeDeficits));
+        $xw->writeElement('CarriedForwardNonTradeDeficits', $this->wholeMoney($this->carriedForwardNonTradeDeficits));
+        $xw->writeElement('NonTradingLossIntangibles', $this->wholeMoney($this->nonTradingLossIntangibles));
+        $xw->writeElement('TradingLosses', $this->wholeMoney($this->tradingLosses));
+        $xw->writeElement('TradingLossesCarriedBack', $this->wholeMoney($this->tradingLossesCarriedBack));
+        $xw->writeElement('TradingLossesCarriedForward', $this->wholeMoney($this->tradingLossesCarriedForward));
+        $xw->writeElement('NonTradeCapitalAllowances', $this->wholeMoney($this->nonTradeCapitalAllowances));
+        $xw->writeElement('QualifyingDonations', $this->wholeMoney($this->qualifyingDonations));
+        $xw->writeElement('GroupRelief', $this->wholeMoney($this->groupRelief));
+        $xw->writeElement('GroupReliefForCarriedForwardLosses', $this->wholeMoney($this->groupReliefForCarriedForwardLosses));
+        $xw->writeElement('RingFenceProfitsIncluded', $this->wholeMoney($this->ringFenceProfitsIncluded));
+        $xw->writeElement('NorthernIrelandProfitsIncluded', $this->wholeMoney($this->northernIrelandProfitsIncluded));
+        // NEW: RingFenceCalculation
+        if (!empty($this->ringFenceCalculation)) {
+            $xw->startElement('RingFenceCalculation');
+            $xw->writeElement('RingFenceProfits', $this->wholeMoney($this->ringFenceCalculation['RingFenceProfits']));
+            $xw->writeElement('RingFenceTax', $this->money($this->ringFenceCalculation['RingFenceTax']));
+            $xw->endElement();
+        }
+        // NEW: NorthernIrelandCalculation
+        if (!empty($this->northernIrelandCalculation)) {
+            $xw->startElement('NorthernIrelandCalculation');
+            $xw->writeElement('NIProfits', $this->wholeMoney($this->northernIrelandCalculation['NIProfits']));
+            $xw->writeElement('NITax', $this->money($this->northernIrelandCalculation['NITax']));
+            $xw->endElement();
+        }
+        // NEW: LossesAndDeficits
+        if (!empty($this->lossesAndDeficits)) {
+            $xw->startElement('LossesAndDeficits');
+            $xw->writeElement('TotalLosses', $this->wholeMoney($this->lossesAndDeficits['TotalLosses']));
+            $xw->writeElement('TotalDeficits', $this->wholeMoney($this->lossesAndDeficits['TotalDeficits']));
+            $xw->endElement();
+        }
+        // NEW: CommunityInvestmentRelief
+        if (!empty($this->communityInvestmentRelief)) {
+            $xw->writeElement('CommunityInvestmentRelief', $this->wholeMoney($this->communityInvestmentRelief));
+        }
+        // NEW: OtherReliefs
+        if (!empty($this->otherReliefs)) {
+            $xw->writeElement('OtherReliefs', $this->wholeMoney($this->otherReliefs));
+        }
         $xw->startElement('CorporationTaxChargeable');
         if ($this->associatedCompanies !== null || $this->associatedCompaniesFinancialYears) {
             $xw->startElement('AssociatedCompanies');
@@ -482,7 +741,6 @@ class CT600 extends GovTalk
             }
             $xw->endElement();
         }
-        // Financial years (1 mandatory, second optional)
         $fyIndex = 0;
         foreach ($calc['financialYears'] as $fy) {
             $fyIndex++;
@@ -500,7 +758,12 @@ class CT600 extends GovTalk
         $xw->endElement(); // CorporationTaxChargeable
         $xw->writeElement('CorporationTax', $this->money($tax));
         if ($marginalRelief > 0) {
-            // Only ring fence element available in schema; include only if ring fence scenario flagged (not implemented) else skip.
+            // Only ring fence element available in schema; include only if ring fence scenario flagged
+            if (!empty($this->ringFenceCalculation)) {
+                $xw->startElement('MarginalRelief');
+                $xw->writeElement('RingFence', $this->money($marginalRelief));
+                $xw->endElement();
+            }
         }
         $xw->writeElement('NetCorporationTaxChargeable', $this->money($tax));
         $xw->startElement('TaxReliefsAndDeductions');
@@ -512,7 +775,6 @@ class CT600 extends GovTalk
         $xw->endElement();
         $xw->endElement(); // CompanyTaxCalculation
 
-        // CJRS and other elements
         $xw->startElement('CJRS');
         $xw->writeElement('CJRSreceived', $this->wholeMoney($this->cjrsReceived));
         $xw->writeElement('CJRSdue', $this->wholeMoney($this->cjrsDue));
@@ -546,7 +808,22 @@ class CT600 extends GovTalk
             $xw->writeRaw($fragment); // trust caller
         }
 
-        // Attachments (optional, multiple)
+        // NEW: OtherAttachment for non-XBRL attachments
+        if (!empty($this->otherAttachments)) {
+            $xw->startElement('AttachedFiles');
+            foreach ($this->otherAttachments as $att) {
+                $xw->startElement('OtherAttachment');
+                $xw->writeElement('FileName', $att['FileName']);
+                $xw->writeElement('FileType', $att['FileType']); // e.g., PDF, ESEF
+                if (!empty($att['Description'])) {
+                    $xw->writeElement('Description', $att['Description']);
+                }
+                $xw->endElement(); // OtherAttachment
+            }
+            $xw->endElement(); // AttachedFiles
+        }
+
+        // Attachments (already handled for XBRL, but ensure proper nesting)
         if ($this->accountsAttachments || $this->computationsAttachments) {
             $xw->startElement('AttachedFiles');
             $xw->startElement('XBRLsubmission');
