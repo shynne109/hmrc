@@ -852,7 +852,7 @@ class CT600 extends GovTalk
 
     private function validateBodySchema(string $bodyXml): void
     {
-        $dom = new \DOMDocument();
+        $dom = new DOMDocument();
         $dom->preserveWhiteSpace = false;
         if (!$dom->loadXML($bodyXml)) {
             throw new \RuntimeException('Invalid CT body XML');
