@@ -32,6 +32,7 @@
         "ext-xmlwriter": "*",
         "ext-zlib": "*",
         "guzzlehttp/guzzle": "^7.9",
+        "illuminate/session": "^8.83",
         "league/oauth2-client": "^2.8",
         "psr/log": "^3.0"
     },

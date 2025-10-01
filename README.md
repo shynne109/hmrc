@@ -845,6 +845,42 @@ echo $request->fire()->getBody();
 2. Exchange code for token and store via `\HMRC\Oauth2\AccessToken::set($token)`.
 3. Invoke request class (e.g. `HelloUserRequest`).
 
+#### Laravel Session Integration
+
+The `\HMRC\Oauth2\AccessToken` class now uses Laravel sessions instead of native PHP sessions. This provides better integration with Laravel applications and improved session management.
+
+**Usage Examples:**
+```php
+// Store an access token (same as before)
+\HMRC\Oauth2\AccessToken::set($token);
+
+// Check if token exists
+if (\HMRC\Oauth2\AccessToken::exists()) {
+    // Token is stored in session
+}
+
+// Get the token object
+$token = \HMRC\Oauth2\AccessToken::get();
+
+// Check if token is valid (exists and not expired)
+if (\HMRC\Oauth2\AccessToken::isValid()) {
+    // Token exists and is not expired
+}
+
+// Get raw token string
+$rawToken = \HMRC\Oauth2\AccessToken::getRaw();
+
+// Remove token from session
+\HMRC\Oauth2\AccessToken::remove();
+
+// Clear all session data (use with caution)
+\HMRC\Oauth2\AccessToken::clearAll();
+```
+
+**Requirements:**
+- Laravel session configuration must be properly set up
+- `illuminate/session` package is required (already included in composer.json)
+
 Environment switch:
 ```php
 \HMRC\Environment\Environment::getInstance()->setToLive();
