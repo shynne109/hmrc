@@ -5,6 +5,7 @@ namespace HMRC\Oauth2;
 use HMRC\Exceptions\InvalidVariableTypeException;
 use HMRC\Exceptions\MissingAccessTokenException;
 use League\OAuth2\Client\Token\AccessTokenInterface;
+use Illuminate\Support\Facades\Session;
 
 class AccessToken
 {
@@ -12,7 +13,7 @@ class AccessToken
 
     public static function exists(): bool
     {
-        return isset($_SESSION[self::SESSION_KEY]);
+        return Session::has(self::SESSION_KEY);
     }
 
     /**
@@ -20,7 +21,8 @@ class AccessToken
      */
     public static function get()
     {
-        return isset($_SESSION[self::SESSION_KEY]) ? unserialize($_SESSION[self::SESSION_KEY]) : null;
+        $token = Session::get(self::SESSION_KEY);
+        return $token ? unserialize($token) : null;
     }
 
     /**
@@ -38,7 +40,7 @@ class AccessToken
             throw new InvalidVariableTypeException('Access token must be string or implement AccessTokenInterface.');
         }
 
-        $_SESSION[self::SESSION_KEY] = $accessToken;
+        Session::put(self::SESSION_KEY, $accessToken);
     }
 
     /**
@@ -56,5 +58,49 @@ class AccessToken
         }
 
         return $accessToken->hasExpired();
+    }
+
+    /**
+     * Remove the access token from the session
+     */
+    public static function remove(): void
+    {
+        Session::forget(self::SESSION_KEY);
+    }
+
+    /**
+     * Clear all session data
+     */
+    public static function clearAll(): void
+    {
+        Session::flush();
+    }
+
+    /**
+     * Get the raw token string from session
+     * 
+     * @return string|null
+     */
+    public static function getRaw(): ?string
+    {
+        return Session::get(self::SESSION_KEY);
+    }
+
+    /**
+     * Check if token exists and is not expired
+     * 
+     * @return bool
+     */
+    public static function isValid(): bool
+    {
+        if (!self::exists()) {
+            return false;
+        }
+
+        try {
+            return !self::hasExpired();
+        } catch (MissingAccessTokenException $e) {
+            return false;
+        }
     }
 }

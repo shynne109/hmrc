@@ -1411,7 +1411,7 @@ class GovTalk implements LoggerAwareInterface
          * @see GovTalk::setTimestamp() for usage.
          */
         if ($this->timestamp && $this->govTalkTest === '1') {
-            $package->writeElement('GatewayTimestamp', $this->timestamp->format('c'));
+            $package->writeElement('GatewayTimestamp', $this->timestamp->format('Y-m-d\TH:i:s'));
         }
 
         $package->endElement(); # MessageDetails
