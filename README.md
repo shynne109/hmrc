@@ -1,6 +1,6 @@
-# HMRC (Gift Aid, PAYE RTI: FPS / EPS / NVR, CIS Monthly Return, VAT Check) Submission Library
+# HMRC (Gift Aid, PAYE RTI: FPS / EPS / NVR, CIS Monthly Return, CIS MTD API, VAT Check, CT600) Submission Library
 
-**A library for charities and CASCs to claim Gift Aid (including Small Donations) and early-stage PAYE RTI submissions (FPS, EPS, NVR) to HMRC**
+**A comprehensive library for HMRC submissions including Gift Aid, PAYE RTI, CIS (Monthly Return & MTD API), VAT, and Corporation Tax**
 
 
 
@@ -10,9 +10,7 @@ Amateur Sports Clubs (CASCs) by allowing them to reclaim basic rate tax on a don
 
 'HMRC Charity Repayment Claims' is a library for submitting Gift Aid claims to HMRC.
 
-As of 2025 this fork includes initial implementations of PAYE RTI submissions: Full Payment Submission (FPS), Employer Payment Summary (EPS) and NINO Verification Request (NVR) for the 2025–26 schema subset, each with a real IRmark. It now also includes a CIS Monthly Return builder (aligned to CISreturn v1.2) with declarations, nil return support, aggregated subcontractor totals and optional local schema validation, plus a VAT number checking REST client.
-
-Early support for Corporation Tax (CT600) submissions (core subset, v1.993 schema) has been added.
+As of 2025 this fork includes initial implementations of PAYE RTI submissions: Full Payment Submission (FPS), Employer Payment Summary (EPS) and NINO Verification Request (NVR) for the 2025–26 schema subset, each with a real IRmark. It now also includes a CIS Monthly Return builder (aligned to CISreturn v1.2) with declarations, nil return support, aggregated subcontractor totals and optional local schema validation, plus a **CIS Deductions MTD API** (v3.0) with full OAuth2 support for submit, amend, retrieve, and delete operations. Additionally includes VAT number checking REST client and Corporation Tax (CT600) submissions (core subset, v1.993 schema).
 
 
 
@@ -33,6 +31,26 @@ And run composer to update your dependencies:
 
 $ curl -s http://getcomposer.org/installer | php
 $ php composer.phar update
+
+## Quick Reference
+
+This library supports multiple HMRC APIs and submission types:
+
+### Making Tax Digital (MTD) APIs - OAuth2 Required
+- **[CIS Deductions API](#cis-deductions-api-mtd---making-tax-digital)** - Submit, amend, retrieve, and delete CIS deductions (v3.0)
+- **[VAT API](#vat-api)** - VAT number validation and obligations checking
+
+### XML Gateway Submissions - GovTalk Protocol
+- **[Gift Aid Claims](#gift-aid)** - Charity repayment claims with Small Donations Scheme
+- **[PAYE RTI](#paye-rti-fps-new)** - Full Payment Submission (FPS), Employer Payment Summary (EPS), NINO Verification (NVR)
+- **[CIS Monthly Return](#cis-monthly-return-cis300--v12-schema)** - CIS300 monthly return submissions
+- **[Corporation Tax (CT600)](#corporation-tax-ct600--full-elementattribute-coverage-v1993)** - CT600 submissions with full v1.993 schema
+
+### Authentication & Session Management
+- **[OAuth2 Setup](#authentication-setup)** - User-restricted API authentication
+- **[Laravel Session Integration](#laravel-session-integration)** - Token management with Laravel sessions
+
+---
 
 ## Test
 
@@ -889,6 +907,465 @@ Environment switch:
 ## Construction Industry Scheme (CIS)
 
 See "CIS Monthly Return" section above for the v1.2 Monthly Return builder. A verification (CISrequest) message builder is a potential future enhancement.
+
+---
+
+## CIS Deductions API (MTD - Making Tax Digital)
+
+The library now includes full support for the **HMRC CIS (Construction Industry Scheme) Deductions API v3.0** for Making Tax Digital. This RESTful API allows contractors and subcontractors to manage CIS deductions data.
+
+**API Documentation:** [HMRC CIS Deductions API](https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/cis-deductions-api/3.0)
+
+### Features
+
+- ✅ **Submit CIS Deductions** - Create new CIS deduction records
+- ✅ **Amend CIS Deductions** - Update existing CIS deduction submissions
+- ✅ **Retrieve CIS Deductions** - Get current position with filtering by source (all, contractor, customer)
+- ✅ **Delete CIS Deductions** - Remove specific CIS deduction submissions
+- ✅ **OAuth2 Authentication** - User-restricted endpoint support with access token management
+- ✅ **Government Test Scenarios** - Full support for sandbox testing with predefined scenarios
+- ✅ **Laravel Session Integration** - Seamless token storage using Laravel sessions
+
+### Authentication Setup
+
+CIS Deductions API requires OAuth2 user-restricted authentication. Set up your provider and obtain an access token:
+
+```php
+use HMRC\Oauth2\Provider;
+use HMRC\Oauth2\AccessToken;
+
+// 1. Create OAuth2 provider
+$provider = new Provider(
+    clientId: 'your-client-id',
+    clientSecret: 'your-client-secret',
+    redirectUri: 'https://your-app.com/callback'
+);
+
+// 2. Redirect user to HMRC authorization
+$authUrl = $provider->getAuthorizationUrl([
+    'scope' => [
+        'read:cis-deductions',
+        'write:cis-deductions'
+    ]
+]);
+header('Location: ' . $authUrl);
+
+// 3. Handle callback and store token
+$token = $provider->getAccessToken('authorization_code', [
+    'code' => $_GET['code']
+]);
+AccessToken::set($token);
+```
+
+### 1. Submit CIS Deductions
+
+Create new CIS deduction records for a subcontractor.
+
+**Endpoint:** `POST /individuals/deductions/cis/{nino}/amendments`
+
+```php
+use HMRC\CIS\SubmitCISDeductionRequest;
+use HMRC\CIS\SubmitCISDeductionPostBody;
+
+// Create post body with deduction details
+$postBody = new SubmitCISDeductionPostBody();
+$postBody->setFromDate('2024-04-06')
+    ->setToDate('2025-04-05')
+    ->setContractorName('ABC Construction Ltd')
+    ->setEmployerRef('123/AB56789')
+    ->setPeriodData([
+        [
+            'deductionFromDate' => '2024-04-06',
+            'deductionToDate' => '2024-05-05',
+            'deductionAmount' => 355.00,
+            'costOfMaterials' => 350.00,
+            'grossAmountPaid' => 1750.50
+        ],
+        [
+            'deductionFromDate' => '2024-05-06',
+            'deductionToDate' => '2024-06-05',
+            'deductionAmount' => 355.00,
+            'costOfMaterials' => 350.00,
+            'grossAmountPaid' => 1750.50
+        ]
+    ]);
+
+// Create and fire request
+$request = new SubmitCISDeductionRequest(
+    nino: 'AA123456A',
+    postBody: $postBody
+);
+
+// Optional: Set government test scenario for sandbox testing
+// $request->setGovTestScenario(SubmitCISDeductionGovTestScenario::STATEFUL);
+
+$response = $request->fire();
+$result = json_decode($response->getBody(), true);
+
+// Response includes submissionId for future amendments
+echo "Submission ID: " . $result['submissionId'];
+```
+
+**Government Test Scenarios for Submit:**
+- `STATEFUL` - Performs a stateful create
+- `DEDUCTIONS_DATE_RANGE_INVALID` - Simulates invalid deduction date range
+- `UNALIGNED_DEDUCTIONS_PERIOD` - Simulates unaligned deductions period
+- `DUPLICATE_SUBMISSION` - Simulates duplicate submission error
+- `TAX_YEAR_NOT_ENDED` - Simulates submission for tax year that hasn't ended
+- `TAX_YEAR_NOT_SUPPORTED` - Simulates unsupported tax year
+
+### 2. Amend CIS Deductions
+
+Update an existing CIS deduction submission using the submission ID.
+
+**Endpoint:** `PUT /individuals/deductions/cis/{nino}/amendments/{submissionId}`
+
+```php
+use HMRC\CIS\AmentCISDeductionRequest;
+use HMRC\CIS\AmendCISDeductionPostBody;
+
+// Create amended post body
+$postBody = new AmendCISDeductionPostBody();
+$postBody->setFromDate('2024-04-06')
+    ->setToDate('2025-04-05')
+    ->setContractorName('ABC Construction Ltd')
+    ->setEmployerRef('123/AB56789')
+    ->setPeriodData([
+        [
+            'deductionFromDate' => '2024-04-06',
+            'deductionToDate' => '2024-05-05',
+            'deductionAmount' => 400.00,  // Updated amount
+            'costOfMaterials' => 375.00,   // Updated materials
+            'grossAmountPaid' => 1850.00   // Updated gross
+        ]
+    ]);
+
+// Create amendment request with submission ID
+$request = new AmentCISDeductionRequest(
+    nino: 'AA123456A',
+    submissionId: '4557ecb5-fd32-48cc-81f5-e6acd1099f3c',
+    postBody: $postBody
+);
+
+// Optional: Set government test scenario
+// $request->setGovTestScenario(AmendCISDeductionGovTestScenario::NOT_FOUND);
+
+$response = $request->fire();
+
+if ($response->getStatusCode() === 204) {
+    echo "CIS deductions amended successfully";
+}
+```
+
+**Government Test Scenarios for Amend:**
+- `NOT_FOUND` - Simulates submission not found
+- `DEDUCTIONS_DATE_RANGE_INVALID` - Invalid deduction date range
+- `UNALIGNED_DEDUCTIONS_PERIOD` - Unaligned deductions period
+- `DUPLICATE_PERIOD` - Duplicate period error
+- `TAX_YEAR_NOT_SUPPORTED` - Unsupported tax year
+- `OUTSIDE_AMENDMENT_WINDOW` - Amendment window expired
+- `STATEFUL` - Stateful amendment
+
+### 3. Retrieve CIS Deductions
+
+Get the current position of CIS deductions for a specific tax year and source.
+
+**Endpoint:** `GET /individuals/deductions/cis/{nino}/current-position/{taxYear}/{source}`
+
+```php
+use HMRC\CIS\RetrieveCISDeductionsRequest;
+use HMRC\CIS\RetrieveCISDeductionSources;
+
+// Retrieve all CIS deductions for tax year 2023-24
+$request = new RetrieveCISDeductionsRequest(
+    nino: 'AA123456A',
+    taxYear: '2023-24',
+    source: RetrieveCISDeductionSources::ALL  // or CONTRACTOR, CUSTOMER
+);
+
+// Optional: Set government test scenario
+// $request->setGovTestScenario(RetrieveCISDeductionGovTestScenario::NOT_FOUND);
+
+$response = $request->fire();
+$deductions = json_decode($response->getBody(), true);
+
+// Process deductions
+foreach ($deductions['cisDeductions'] as $deduction) {
+    echo "Contractor: " . $deduction['contractorName'] . "\n";
+    echo "Total Deduction: £" . $deduction['totalDeductionAmount'] . "\n";
+    
+    // Period data
+    foreach ($deduction['periodData'] as $period) {
+        echo "Period: " . $period['deductionFromDate'] . " to " . $period['deductionToDate'] . "\n";
+        echo "Amount: £" . $period['deductionAmount'] . "\n";
+    }
+}
+```
+
+**Available Sources:**
+- `RetrieveCISDeductionSources::ALL` - All deductions (contractor + customer)
+- `RetrieveCISDeductionSources::CONTRACTOR` - Only contractor-submitted deductions
+- `RetrieveCISDeductionSources::CUSTOMER` - Only customer-submitted deductions
+
+**Government Test Scenarios for Retrieve:**
+- `NOT_FOUND` - No CIS deductions found
+- `TAX_YEAR_NOT_SUPPORTED` - Unsupported tax year
+- `STATEFUL` - Stateful retrieve
+
+### 4. Delete CIS Deductions
+
+Remove a specific CIS deduction submission.
+
+**Endpoint:** `DELETE /individuals/deductions/cis/{nino}/amendments/{submissionId}`
+
+```php
+use HMRC\CIS\CISDeleteRequest;
+
+// Note: Implement specific delete request class following the pattern
+// The base CISDeleteRequest is abstract and requires implementation
+
+// Example implementation would follow this pattern:
+class DeleteCISDeductionRequest extends CISDeleteRequest
+{
+    protected $submissionId;
+    
+    public function __construct(string $nino, string $submissionId)
+    {
+        parent::__construct($nino);
+        $this->submissionId = $submissionId;
+    }
+    
+    protected function getCisApiPath(): string
+    {
+        return "/amendments/{$this->submissionId}";
+    }
+    
+    protected function getQueryString(): array
+    {
+        return [];
+    }
+    
+    protected function getGovTestScenarioClass(): GovernmentTestScenario
+    {
+        return new DeleteCISDeductionGovTestScenario();
+    }
+}
+
+$request = new DeleteCISDeductionRequest(
+    nino: 'AA123456A',
+    submissionId: '4557ecb5-fd32-48cc-81f5-e6acd1099f3c'
+);
+
+$response = $request->fire();
+
+if ($response->getStatusCode() === 204) {
+    echo "CIS deductions deleted successfully";
+}
+```
+
+**Government Test Scenarios for Delete:**
+- `NOT_FOUND` - Submission not found
+- `STATEFUL` - Stateful delete
+
+### Data Format Guidelines
+
+**National Insurance Number (NINO):**
+- Format: `AA999999A` (2 letters, 6 digits, 1 letter)
+- Example: `TC663795B`
+
+**Tax Year Format:**
+- Format: `YYYY-YY` (e.g., `2023-24`)
+- Represents April 6th to April 5th of following year
+
+**Date Format:**
+- ISO 8601: `YYYY-MM-DD`
+- Example: `2024-04-06`
+
+**Employer Reference:**
+- Format: `999/XX99999`
+- Example: `123/AB56789`
+
+**Period Data Fields:**
+- `deductionFromDate` - Start date of deduction period (required)
+- `deductionToDate` - End date of deduction period (required)
+- `deductionAmount` - Amount deducted for CIS (required)
+- `costOfMaterials` - Cost of materials (optional)
+- `grossAmountPaid` - Gross amount paid (optional)
+
+### Error Handling
+
+The library provides detailed error responses for validation and business rule failures:
+
+```php
+use HMRC\Exceptions\InvalidPostBodyException;
+
+try {
+    $postBody = new SubmitCISDeductionPostBody();
+    $postBody->setFromDate('2024-04-06')
+        ->setToDate('2025-04-05')
+        // Missing required fields will throw exception
+        ->validate();
+        
+    $request = new SubmitCISDeductionRequest('AA123456A', $postBody);
+    $response = $request->fire();
+    
+} catch (InvalidPostBodyException $e) {
+    echo "Validation error: " . $e->getMessage();
+} catch (\Exception $e) {
+    echo "API error: " . $e->getMessage();
+}
+```
+
+**Common Error Responses:**
+
+| Status Code | Error | Description |
+|-------------|-------|-------------|
+| 400 | FORMAT_NINO | Invalid NINO format |
+| 400 | FORMAT_TAX_YEAR | Invalid tax year format |
+| 400 | FORMAT_FROM_DATE | Invalid from date format |
+| 400 | FORMAT_TO_DATE | Invalid to date format |
+| 400 | RULE_TAX_YEAR_NOT_SUPPORTED | Tax year not supported |
+| 400 | RULE_TAX_YEAR_NOT_ENDED | Tax year has not ended |
+| 403 | CLIENT_OR_AGENT_NOT_AUTHORISED | Not authorized for this NINO |
+| 404 | NOT_FOUND | No CIS deductions found |
+| 409 | DUPLICATE_SUBMISSION | Duplicate submission for period |
+| 422 | RULE_UNALIGNED_DEDUCTIONS_PERIOD | Deductions period not aligned |
+| 422 | RULE_DEDUCTIONS_DATE_RANGE_INVALID | Invalid deduction date range |
+
+### Testing in Sandbox
+
+All CIS requests support government test scenarios for comprehensive sandbox testing:
+
+```php
+use HMRC\CIS\SubmitCISDeductionRequest;
+use HMRC\CIS\SubmitCISDeductionGovTestScenario;
+
+$request = new SubmitCISDeductionRequest($nino, $postBody);
+
+// Test different scenarios
+$request->setGovTestScenario(SubmitCISDeductionGovTestScenario::STATEFUL);
+// or
+$request->setGovTestScenario(SubmitCISDeductionGovTestScenario::DUPLICATE_SUBMISSION);
+// or
+$request->setGovTestScenario(SubmitCISDeductionGovTestScenario::TAX_YEAR_NOT_ENDED);
+
+$response = $request->fire();
+```
+
+### Environment Configuration
+
+Switch between sandbox and production environments:
+
+```php
+use HMRC\Environment\Environment;
+
+// Sandbox (default)
+Environment::getInstance()->setToSandbox();
+
+// Production
+Environment::getInstance()->setToLive();
+```
+
+### Complete Example Workflow
+
+```php
+use HMRC\Oauth2\Provider;
+use HMRC\Oauth2\AccessToken;
+use HMRC\CIS\SubmitCISDeductionRequest;
+use HMRC\CIS\SubmitCISDeductionPostBody;
+use HMRC\CIS\RetrieveCISDeductionsRequest;
+use HMRC\CIS\RetrieveCISDeductionSources;
+use HMRC\CIS\AmentCISDeductionRequest;
+use HMRC\CIS\AmendCISDeductionPostBody;
+
+// 1. Authenticate (one-time setup)
+$provider = new Provider('client-id', 'client-secret', 'redirect-uri');
+$token = $provider->getAccessToken('authorization_code', ['code' => $_GET['code']]);
+AccessToken::set($token);
+
+// 2. Submit new CIS deductions
+$submitBody = new SubmitCISDeductionPostBody();
+$submitBody->setFromDate('2024-04-06')
+    ->setToDate('2025-04-05')
+    ->setContractorName('ABC Construction Ltd')
+    ->setEmployerRef('123/AB56789')
+    ->setPeriodData([
+        [
+            'deductionFromDate' => '2024-04-06',
+            'deductionToDate' => '2024-05-05',
+            'deductionAmount' => 355.00,
+            'costOfMaterials' => 350.00,
+            'grossAmountPaid' => 1750.50
+        ]
+    ]);
+
+$submitRequest = new SubmitCISDeductionRequest('AA123456A', $submitBody);
+$submitResponse = $submitRequest->fire();
+$submissionData = json_decode($submitResponse->getBody(), true);
+$submissionId = $submissionData['submissionId'];
+
+echo "Submitted with ID: $submissionId\n";
+
+// 3. Retrieve current deductions
+$retrieveRequest = new RetrieveCISDeductionsRequest(
+    'AA123456A',
+    '2024-25',
+    RetrieveCISDeductionSources::ALL
+);
+$retrieveResponse = $retrieveRequest->fire();
+$currentDeductions = json_decode($retrieveResponse->getBody(), true);
+
+print_r($currentDeductions);
+
+// 4. Amend submission if needed
+$amendBody = new AmendCISDeductionPostBody();
+$amendBody->setFromDate('2024-04-06')
+    ->setToDate('2025-04-05')
+    ->setContractorName('ABC Construction Ltd')
+    ->setEmployerRef('123/AB56789')
+    ->setPeriodData([
+        [
+            'deductionFromDate' => '2024-04-06',
+            'deductionToDate' => '2024-05-05',
+            'deductionAmount' => 400.00,  // Corrected amount
+            'costOfMaterials' => 375.00,
+            'grossAmountPaid' => 1850.00
+        ]
+    ]);
+
+$amendRequest = new AmentCISDeductionRequest('AA123456A', $submissionId, $amendBody);
+$amendResponse = $amendRequest->fire();
+
+if ($amendResponse->getStatusCode() === 204) {
+    echo "Amendment successful\n";
+}
+```
+
+### API Classes Reference
+
+| Class | Purpose | HTTP Method |
+|-------|---------|-------------|
+| `SubmitCISDeductionRequest` | Submit new CIS deductions | POST |
+| `SubmitCISDeductionPostBody` | Data structure for submit | - |
+| `AmentCISDeductionRequest` | Amend existing submission | PUT |
+| `AmendCISDeductionPostBody` | Data structure for amend | - |
+| `RetrieveCISDeductionsRequest` | Get current CIS deductions | GET |
+| `RetrieveCISDeductionSources` | Source filter constants | - |
+| `CISDeleteRequest` | Delete submission (base class) | DELETE |
+| `CISGetRequest` | Base class for GET requests | GET |
+| `CISPostRequest` | Base class for POST requests | POST |
+| `CISPutRequest` | Base class for PUT requests | PUT |
+
+### Government Test Scenario Classes
+
+| Class | Used With | Purpose |
+|-------|-----------|---------|
+| `SubmitCISDeductionGovTestScenario` | Submit | Test submission scenarios |
+| `AmendCISDeductionGovTestScenario` | Amend | Test amendment scenarios |
+| `RetrieveCISDeductionGovTestScenario` | Retrieve | Test retrieval scenarios |
+| `DeleteCISDeductionGovTestScenario` | Delete | Test deletion scenarios |
+
+---
 
 
 ## Corporation Tax (CT600) – Full Element/Attribute Coverage (v1.993)
