@@ -797,7 +797,7 @@ class CT600 extends GovTalk
     {
         // Error 9112: Can only provide PDF accounts if 'No accounts reason' is 'PDF accounts attached with explanation'
         if (!empty($this->ixbrlAccounts) && $this->accountsReason !== 'PDF accounts attached with explanation') {
-            $errors[] = "Error 9112: You can only provide a set of PDF accounts if you also complete the 'No accounts reason' with the value of 'PDF accounts attached with explanation'";
+            $errors[] = "You can only provide PDF accounts if 'No accounts reason' is 'PDF accounts attached with explanation'";
         }
 
         // Error 9113: Must provide iXBRL accounts if 'No accounts reason' is absent
@@ -1719,12 +1719,18 @@ class CT600 extends GovTalk
     $xw->writeElement('DeductedIncome', $this->money($this->deductedIncome));
     $xw->writeElement('PropertyBusinessIncome', $this->money($this->propertyBusinessIncome));
     $xw->writeElement('NonTradingGainsIntangibles', $this->money($this->nonTradingGainsIntangibles));
-    $xw->writeElement('TonnageTaxProfits', $this->money($this->tonnageTaxProfits));
+    // Only include TonnageTaxProfits if it has a value > 0 or if it's required (Box 120 completed)
+    if ($this->tonnageTaxProfits > 0) {
+        $xw->writeElement('TonnageTaxProfits', $this->money($this->tonnageTaxProfits));
+    }
     $xw->writeElement('OtherIncome', $this->money($this->otherIncome));
     $xw->endElement(); // Income
     $xw->startElement('ChargeableGains');
     $xw->writeElement('GrossGains', $this->money($this->grossGains));
-    $xw->writeElement('AllowableLosses', $this->money($this->allowableLosses));
+    // Only include AllowableLosses if GrossGains > 0 (HMRC rule 9158)
+    if ($this->grossGains > 0) {
+        $xw->writeElement('AllowableLosses', $this->money($this->allowableLosses));
+    }
     $xw->writeElement('NetChargeableGains', $this->money($netChargeableGains));
     $xw->endElement();
     $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForwardOverall));
@@ -1749,11 +1755,19 @@ class CT600 extends GovTalk
     $xw->startElement('ChargesAndReliefs');
     $xw->writeElement('ProfitsBeforeDonationsAndGroupRelief', $this->wholeMoney($profitsBeforeDonationsAndGroupRelief));
     $xw->writeElement('QualifyingDonations', $this->money($this->qualifyingDonations));
-    $xw->writeElement('GroupRelief', $this->money($this->groupRelief ?? 0.00));
-    $xw->writeElement('GroupReliefForCarriedForwardLosses', $this->money($this->groupReliefForCarriedForwardLosses ?? 0));
+    // Only include Group Relief if there are actual group companies (Box 105 completed) or return type is Amended
+    if (($this->groupRelief ?? 0) > 0 || $this->returnType === 1) {
+        $xw->writeElement('GroupRelief', $this->money($this->groupRelief ?? 0.00));
+    }
+    if (($this->groupReliefForCarriedForwardLosses ?? 0) > 0 || $this->returnType === 1) {
+        $xw->writeElement('GroupReliefForCarriedForwardLosses', $this->money($this->groupReliefForCarriedForwardLosses ?? 0));
+    }
     $xw->endElement();
     $xw->writeElement('ChargeableProfits', $this->money($chargeableProfits));
-    $xw->writeElement('RingFenceProfitsIncluded', $this->money($this->ringFenceProfitsIncluded));
+    // Only include RingFenceProfitsIncluded if there are actual ring fence profits (Box 135) or return type is Amended
+    if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+        $xw->writeElement('RingFenceProfitsIncluded', $this->money($this->ringFenceProfitsIncluded));
+    }
     if ($this->thisPeriod === 'yes') {
         $xw->writeElement('NorthernIrelandProfitsIncluded', $this->money($this->northernIrelandProfitsIncluded));
     }
@@ -1831,14 +1845,20 @@ class CT600 extends GovTalk
         $xw->writeElement('LoansToParticipators', $this->money($this->loansToParticipators));
     }
     if ($this->ct600aReliefDue !== null) $xw->writeElement('CT600AreliefDue', $this->ct600aReliefDue);
-    $xw->writeElement('CFCtaxPayable', $this->money($this->cfcTaxPayable));
+    // Only include CFC tax payable if there are CFC companies (Box 100 completed) or return type is Amended
+    if ($this->cfcTaxPayable > 0 || $this->returnType === 1) {
+        $xw->writeElement('CFCtaxPayable', $this->money($this->cfcTaxPayable));
+    }
     $xw->writeElement('BankLevyPayable', $this->money($this->bankLevyPayable));
     $xw->writeElement('BankSurchargePayable', $this->money($this->bankSurchargePayable));
     $xw->writeElement('RPDTpayable', $this->money($this->rpdtPayable));
     $xw->writeElement('CFCandBankLevyTotal', $this->money($cfcAndBankLevyTotal));
     $xw->writeElement('EOGPLpayable', $this->money($this->eogplPayable));
     $xw->writeElement('EGLpayable', $this->money($this->eglPayable));
-    $xw->writeElement('SupplementaryCharge', $this->money($this->supplementaryCharge));
+    // Only include SupplementaryCharge if there are ring fence profits (Box 135) or return type is Amended
+    if ($this->supplementaryCharge > 0 || $this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+        $xw->writeElement('SupplementaryCharge', $this->money($this->supplementaryCharge));
+    }
     $xw->writeElement('TaxChargeable', $this->money($taxChargeable));
     $xw->startElement('IncomeTax');
     $xw->writeElement('DeductedIncomeTax', $this->money($this->deductedIncomeTax));
@@ -1846,7 +1866,9 @@ class CT600 extends GovTalk
     $xw->endElement();
     $xw->writeElement('TaxPayable', $this->money($taxPayable));
     $xw->writeElement('CJRSoverpaymentsNowDue', $this->money($this->cjrsOverpaymentsNowDue));
-    $xw->writeElement('RestitutionTax', $this->money($this->restitutionTax));
+    if ($this->restitutionTax > 0) {
+        $xw->writeElement('RestitutionTax', $this->money($this->restitutionTax));
+    }
     $xw->writeElement('TaxPayableIncludingRestitutionTax', $this->money($taxPayableIncludingRestitutionTax));
     $xw->endElement();
 
@@ -1868,11 +1890,17 @@ class CT600 extends GovTalk
         $xw->writeElement('LifeAssuranceCompanyCredit', $this->money($this->lifeAssuranceCompanyCredit));
     }
     $xw->writeElement('LandOrLifeCredit', $this->money($landOrLifeCredit));
-    $xw->writeElement('RingFenceCorpTaxIncluded', $this->money($this->ringFenceCorpTaxIncluded));
+    // Only include Ring Fence elements if there are ring fence profits (Box 135) or return type is Amended
+    if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+        $xw->writeElement('RingFenceCorpTaxIncluded', $this->money($this->ringFenceCorpTaxIncluded));
+    }
     if ($this->thisPeriod === 'yes') {
         $xw->writeElement('NIcorporationTaxIncluded', $this->money($niCorporationTaxIncluded));
     }
-    $xw->writeElement('RingFenceSupplementaryChargeIncluded', $this->money($this->ringFenceSupplementaryChargeIncluded));
+    // Only include Ring Fence Supplementary Charge if there are ring fence profits (Box 135) or return type is Amended
+    if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+        $xw->writeElement('RingFenceSupplementaryChargeIncluded', $this->money($this->ringFenceSupplementaryChargeIncluded));
+    }
     $xw->writeElement('TaxAlreadyPaid', $this->money($this->taxAlreadyPaid));
     $xw->startElement('TaxOutstandingOrOverpaid');
     if ($taxOutstanding > 0) {
