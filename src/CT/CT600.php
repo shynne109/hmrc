@@ -433,7 +433,7 @@ class CT600 extends GovTalk
         return $this;
     }
 
-        public function setOtherFinancialConcerns(?string $v): self { $this->otherFinancialConcerns = $v; return $this; }
+    public function setOtherFinancialConcerns(?string $v): self { $this->otherFinancialConcerns = $v; return $this; }
     public function setIncomeStatedNetFlag(?string $v): self { $this->incomeStatedNetFlag = $v; return $this; }
     public function setLossesBroughtForwardOverall(float $v): self { $this->lossesBroughtForwardOverall = $v; return $this; }
     public function setUnquotedShares(float $v): self { $this->unquotedShares = $v; return $this; }
