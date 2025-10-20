@@ -22,14 +22,18 @@ class TaxYearValidator
         }
         $startYearFull = (int) $matches[1]; // e.g., 2021
         $endYearShort = (int) $matches[2];  // e.g., 22
+        
         // 2. Derive the full end year
         // We assume the end year is in the same century as the start year
-        $startYearCentury = floor($startYearFull / 100) * 100; // e.g., 2000 from 2021
+        $startYearCentury = (int) (floor($startYearFull / 100) * 100); // e.g., 2000 from 2021
         $endYearFull = $startYearCentury + $endYearShort;
 
-        if ($endYearShort < ($startYearFull % 100)) {
+        // If the short end year is less than or equal to the start year's last two digits,
+        // it means we've crossed into the next century
+        if ($endYearShort <= ($startYearFull % 100)) {
             $endYearFull += 100;
         }
+        
         // 3. Validate consecutiveness: end year must be start year + 1
         if (($startYearFull + 1) !== $endYearFull) {
             throw new InvalidTaxYearFormatException(

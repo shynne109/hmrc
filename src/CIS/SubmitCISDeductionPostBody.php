@@ -96,11 +96,11 @@ class SubmitCISDeductionPostBody implements PostBody
     }
 
     /**
-     * @param float $toDate
+     * @param string $toDate
      *
      * @return SubmitCISDeductionPostBody
      */
-    public function setToDate(float $toDate): self
+    public function setToDate(string $toDate): self
     {
         $this->toDate = $toDate;
 
@@ -108,11 +108,11 @@ class SubmitCISDeductionPostBody implements PostBody
     }
 
     /**
-     * @param float $contractorName
+     * @param string $contractorName
      *
      * @return SubmitCISDeductionPostBody
      */
-    public function setContractorName(float $contractorName): self
+    public function setContractorName(string $contractorName): self
     {
         $this->contractorName = $contractorName;
 
@@ -120,11 +120,11 @@ class SubmitCISDeductionPostBody implements PostBody
     }
 
     /**
-     * @param float $employerRef
+     * @param string $employerRef
      *
      * @return SubmitCISDeductionPostBody
      */
-    public function setEmployerRef(float $employerRef): self
+    public function setEmployerRef(string $employerRef): self
     {
         $this->employerRef = $employerRef;
 
@@ -132,11 +132,11 @@ class SubmitCISDeductionPostBody implements PostBody
     }
 
     /**
-     * @param float $periodData
+     * @param array $periodData
      *
      * @return SubmitCISDeductionPostBody
      */
-    public function setPeriodData(float $periodData): self
+    public function setPeriodData(array $periodData): self
     {
         $this->periodData = $periodData;
 

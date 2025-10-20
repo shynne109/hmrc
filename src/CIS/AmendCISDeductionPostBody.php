@@ -53,17 +53,17 @@ class AmendCISDeductionPostBody implements PostBody
     public function toArray(): array
     {
         return [
-            'periodData'                   => (array) $this->periodData,
+            'periodData' => (array) $this->periodData,
         ];
     }
 
 
     /**
-     * @param float $periodData
+     * @param array $periodData
      *
      * @return SubmitCISDeductionPostBody
      */
-    public function setPeriodData(float $periodData): self
+    public function setPeriodData(array $periodData): self
     {
         $this->periodData = $periodData;
         return $this;

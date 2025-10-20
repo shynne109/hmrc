@@ -44,6 +44,9 @@ class RetrieveCISDeductionsRequest extends CISGetRequest
 
     }
 
+    
+
+
     protected function getCisApiPath(): string
     {
         return "/current-position/{$this->taxYear}/{$this->source}";
