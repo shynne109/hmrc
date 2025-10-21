@@ -425,12 +425,11 @@ class CT600 extends GovTalk
      * @param string $productVersion Product version
      * @return self
      */
-    public function setSoftwareMeta(string $vendorId, string $productName, string $productVersion): self
+    public function setSoftwareMeta(string $vendorId, string $productName, string $productVersion): void
     {
-        $this->vendorId = $vendorId;
+        $this->vendorId = $vendorId; // HMRC expect Vendor ID (4 digits) as URI
         $this->productName = $productName;
         $this->productVersion = $productVersion;
-        return $this;
     }
 
     public function setOtherFinancialConcerns(?string $v): self { $this->otherFinancialConcerns = $v; return $this; }
@@ -1350,14 +1349,20 @@ class CT600 extends GovTalk
         $this->setMessageTransformation('XML');
         $this->addTargetOrganisation('IR');
 
-        // Reset & re-add UTR key for safety
+        // Reset & re-add keys for safety - must match IRheader keys exactly
         $this->resetMessageKeys();
         $this->addMessageKey('UTR', $this->utr);
+        $this->addMessageKey('TaxOfficeNumber', $this->taxOfficeNumber);
+        $this->addMessageKey('TaxOfficeReference', $this->taxOfficeReference);
+
+         if ($this->vendorId !== '') {
+            $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
+        }
         
         // Set software metadata if provided
-        if ($this->vendorId && $this->productName && $this->productVersion) {
-            $this->setSoftwareMeta($this->vendorId, $this->productName, $this->productVersion);
-        }
+        // if ($this->vendorId && $this->productName && $this->productVersion) {
+        //     $this->setSoftwareMeta($this->vendorId, $this->productName, $this->productVersion);
+        // }
         
         // Calculate tax values before validation to ensure accurate business rule checking
         $this->calculateTaxValues();
@@ -1486,19 +1491,19 @@ class CT600 extends GovTalk
         $xw->writeAttribute('Type', 'UTR');
         $xw->text($this->utr);
         $xw->endElement(); // Key
-        if ($this->taxOfficeNumber !== null) {
-            $xw->startElement('Key');
-            $xw->writeAttribute('Type', 'TaxOfficeNumber');
-            $xw->text($this->taxOfficeNumber);
-            $xw->endElement();
-        }
-        if ($this->taxOfficeReference !== null) {
-            $xw->startElement('Key');
-            $xw->writeAttribute('Type', 'TaxOfficeReference');
-            $xw->text($this->taxOfficeReference);
-            $xw->endElement();
-        }
+        
+        $xw->startElement('Key');
+        $xw->writeAttribute('Type', 'TaxOfficeNumber');
+        $xw->text($this->taxOfficeNumber);
+        $xw->endElement();
+
+        $xw->startElement('Key');
+        $xw->writeAttribute('Type', 'TaxOfficeReference');
+        $xw->text($this->taxOfficeReference);
+        $xw->endElement();
+
         $xw->endElement(); // Keys
+
         $xw->writeElement('PeriodEnd', $this->periodEnd);
         if ($this->principalBusinessActivity !== null) {
             $xw->startElement('Principal');
