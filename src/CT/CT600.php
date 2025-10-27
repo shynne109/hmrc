@@ -121,8 +121,6 @@ class CT600 extends GovTalk
     private ?array $otherAttachments = null;
     private string $ixbrlAccounts = '';
     private string $ixbrlComputations = '';
-    private string $noAccountsReason = '';
-    private string $noComputationsReason = '';
     private float $lossesCarriedBack = 0.0;
     private float $currentPeriodLosses = 0.0;
 
@@ -142,9 +140,11 @@ class CT600 extends GovTalk
     // Attachments, schedules, schema
     private bool $enableSchemaValidation = false;
     private ?string $localSchemaPath = null;
-    private array $accountsAttachments = [];
-    private array $computationsAttachments = [];
+    private array $accountsIxbrlAttachments = [];
+    private array $computationsIxbrlAttachments = [];
+    private array $pdfAttachments = []; // For PDF attachments (accounts, computations, or other)
     private array $schedules = [];
+    private array $additionalPdf = [];
     private float $frankedInvestmentIncome = 0.0; // For augmented profits
 
     // Additional properties from template
@@ -271,7 +271,6 @@ class CT600 extends GovTalk
     private ?array $tonnageTax = null;
     private ?string $welshReturn = null;
     private ?string $jointAccounts = null;
-    private ?array $attachedFiles = null;
 
     // Flag indicating if the IRmark should be generated for outgoing XML.
     private bool $generateIRmark = true;
@@ -510,8 +509,6 @@ class CT600 extends GovTalk
     public function setNorthernIrelandInformation(?array $v): self { $this->northernIrelandInformation = $v; return $this; }
     public function setOwnRepaymentsLowerLimit(float $v): self { $this->ownRepaymentsLowerLimit = $v; return $this; }
     public function setRepaymentsForThePeriodCoveredByThisReturn(?array $v): self { $this->repaymentsForThePeriodCoveredByThisReturn = $v; return $this; }
-    public function setSurrender(?array $v): self { $this->surrender = $v; return $this; }
-    public function setBankAccountDetails(?array $v): self { $this->bankAccountDetails = $v; return $this; }
     public function setRAndDCreditWithCondition(?string $v): self { $this->rAndDCreditWithCondition = $v; return $this; }
     public function setPaymentToPerson(?array $v): self { $this->paymentToPerson = $v; return $this; }
     public function setBeforeEndPeriod(?string $v): self { $this->beforeEndPeriod = $v; return $this; }
@@ -524,7 +521,6 @@ class CT600 extends GovTalk
     public function setTonnageTax(?array $v): self { $this->tonnageTax = $v; return $this; }
     public function setWelshReturn(?string $v): self { $this->welshReturn = $v; return $this; }
     public function setJointAccounts(?string $v): self { $this->jointAccounts = $v; return $this; }
-    public function setAttachedFiles(?array $v): self { $this->attachedFiles = $v; return $this; }
     public function setFrankedInvestmentIncome(float $v): self { $this->frankedInvestmentIncome = $v; return $this; }
     public function setNorthernIreland(?array $ni): self
     {
@@ -606,20 +602,92 @@ class CT600 extends GovTalk
     public function setNorthernIrelandProfitsIncluded(float $v): self { $this->northernIrelandProfitsIncluded = $v; return $this; }
 
 
-    public function attachAccountsInlineXbrl(string $ixbrl, ?string $filename = null, bool $entryPoint = false, string $mode = 'inline'): self
+    public function attachAccountsInlineXbrl(string $ixbrl, ?string $filename = null, bool $entryPoint = false, string $mode = 'encoded'): self
     {
-        $this->accountsAttachments[] = ['mode' => $mode, 'content' => $ixbrl, 'filename' => $filename, 'entryPoint' => $entryPoint];
+        $this->accountsIxbrlAttachments[] = ['mode' => $mode, 'content' => $ixbrl, 'filename' => $filename, 'entryPoint' => $entryPoint];
         $this->accountsReason = null;
         return $this;
     }
 
-    public function attachComputationsInlineXbrl(string $ixbrl, ?string $filename = null, bool $entryPoint = false, string $mode = 'inline'): self
+    public function attachComputationsInlineXbrl(string $ixbrl, ?string $filename = null, bool $entryPoint = false, string $mode = 'encoded'): self
     {
-        $this->computationsAttachments[] = ['mode' => $mode, 'content' => $ixbrl, 'filename' => $filename, 'entryPoint' => $entryPoint];
+        $this->computationsIxbrlAttachments[] = ['mode' => $mode, 'content' => $ixbrl, 'filename' => $filename, 'entryPoint' => $entryPoint];
         $this->computationsReason = null;
         return $this;
     }
 
+    
+    public function setBankAccountDetails(
+        string $bankName,
+        string $sortCode,
+        string $accountNumber,
+        string $accountName,
+        ?string $buildingSocReference = null
+    ): self {
+        $this->bankAccountDetails = [
+            'bankName' => $bankName,
+            'sortCode' => $sortCode,
+            'accountNumber' => $accountNumber,
+            'accountName' => $accountName,
+            'buildingSocReference' => $buildingSocReference,
+        ];
+        return $this;
+    }
+
+    public function setSurrender(
+        float $amount,
+        string $jointNoticeStatus,
+        ?float $stopUntilNotice = null
+    ): self {
+        $this->surrender = [
+            'amount' => $amount,
+            'jointNoticeStatus' => strtolower($jointNoticeStatus), // 'attached' or 'willfollow'
+            'stopUntilNotice' => $stopUntilNotice,
+        ];
+        return $this;
+    }
+    
+    public function attachPdf(string $pdfContent, string $filename, string $type, ?string $description = null, bool $isBase64 = false): self
+    {
+        $this->pdfAttachments[] = [
+            'content' => $isBase64 ? $pdfContent : base64_encode($pdfContent),
+            'filename' => $filename,
+            'type' => $type,
+            'description' => $description,
+            'format' => 'pdf'
+        ];
+        return $this;
+    }
+
+    public function attachAdditionalPdf(string $pdfContent, string $filename, ?string $description = null, bool $isBase64 = false): self
+    {
+        return $this->attachPdf($pdfContent, $filename, 'other', $description, $isBase64);
+    }
+
+    public function setRepaymentsForThePeriod(
+        ?float $corporationTax = null,
+        ?float $incomeTax = null,
+        ?float $randDTaxCredit = null,
+        ?float $randDExpenditureCredit = null,
+        ?float $creativeCredit = null,
+        ?float $payableAVECandVGEC = null,
+        ?float $landRemediationCredit = null,
+        ?float $payableCapitalAllowancesFirstYearCredit = null
+    ): self {
+        $this->repaymentsForThePeriodCoveredByThisReturn = [
+            'corporationTax' => $corporationTax,
+            'incomeTax' => $incomeTax,
+            'randDTaxCredit' => $randDTaxCredit,
+            'randDExpenditureCredit' => $randDExpenditureCredit,
+            'creativeCredit' => $creativeCredit,
+            'payableAVECandVGEC' => $payableAVECandVGEC,
+            'landRemediationCredit' => $landRemediationCredit,
+            'payableCapitalAllowancesFirstYearCredit' => $payableCapitalAllowancesFirstYearCredit,
+        ];
+        return $this;
+    }
+
+   
     public function addSchedule(string $code, string $rawXmlFragment): self
     {
         $code = strtoupper($code);
@@ -785,35 +853,11 @@ class CT600 extends GovTalk
             $errors[] = "Error 9110: Boxes 70 and 75 cannot both be completed";
         }
 
-        // Error 9112-9119: Accounts and Computations validation
-        $this->validateAccountsAndComputations($errors);
-
         // Error 9120-9137: Supplementary pages validation
         $this->validateSupplementaryPages($errors);
     }
 
-    private function validateAccountsAndComputations(array &$errors): void
-    {
-        // Error 9112: Can only provide PDF accounts if 'No accounts reason' is 'PDF accounts attached with explanation'
-        if (!empty($this->ixbrlAccounts) && $this->accountsReason !== 'PDF accounts attached with explanation') {
-            $errors[] = "You can only provide PDF accounts if 'No accounts reason' is 'PDF accounts attached with explanation'";
-        }
-
-        // Error 9113: Must provide iXBRL accounts if 'No accounts reason' is absent
-        if (empty($this->accountsReason) && empty($this->ixbrlAccounts)) {
-            $errors[] = "Error 9113: You must provide a set of iXBRL accounts if the 'No accounts reason' is absent";
-        }
-
-        // Error 9115: 'Amendment - accounts already submitted' cannot be used if return type is New
-        if ($this->returnType === 'new' && $this->accountsReason === 'Amendment - accounts already submitted') {
-            $errors[] = "Error 9115: Amendment - accounts already submitted' cannot be used if the return type is New";
-        }
-
-        // Error 9119: 'Amendments - computations already submitted' cannot be used if return type is New
-        if ($this->returnType === 'new' && $this->computationsReason === 'Amendments - computations already submitted') {
-            $errors[] = "Error 9119: Amendments - computations already submitted' cannot be used if the return type is New";
-        }
-    }
+    
 
     private function validateSupplementaryPages(array &$errors): void
     {
@@ -1594,20 +1638,26 @@ class CT600 extends GovTalk
         $xw->writeElement('SME', $this->transferPricing['SME'] ?? 'no');
         $xw->endElement();
     }
+    
     $xw->startElement('Accounts');
-    if (!empty($this->accountsAttachments)) {
+    if (!empty($this->accountsIxbrlAttachments) || $this->accountsReason === 'PDF accounts attached with explanation') {
         $xw->writeElement('ThisPeriodAccounts', 'yes');
-    } elseif ($this->accountsReason !== null) {
+    } 
+    if ($this->accountsReason === 'PDF accounts attached with explanation') {
+        $xw->writeElement('NoAccountsReason', 'PDF accounts attached with explanation');
+    } else {
         $xw->writeElement('NoAccountsReason', $this->accountsReason);
     }
     $xw->endElement();
+    
     $xw->startElement('Computations');
-    if (!empty($this->computationsAttachments)) {
+    if (!empty($this->computationsIxbrlAttachments) || empty($this->computationsReason) || $this->computationsReason === 'Other - PDF attached with explanation') {
         $xw->writeElement('ThisPeriodComputations', 'yes');
-    } elseif ($this->computationsReason !== null) {
+    } else {
         $xw->writeElement('NoComputationsReason', $this->computationsReason);
     }
     $xw->endElement();
+
     if ($this->schedules) {
         $xw->startElement('SupplementaryPages');
         foreach (array_keys($this->schedules) as $code) {
@@ -1997,20 +2047,79 @@ class CT600 extends GovTalk
     $xw->writeElement('OwnRepaymentsLowerLimit', $this->money($this->ownRepaymentsLowerLimit));
     if ($this->repaymentsForThePeriodCoveredByThisReturn !== null) {
         $xw->startElement('RepaymentsForThePeriodCoveredByThisReturn');
-        $xw->endElement();
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['corporationTax']) && $this->repaymentsForThePeriodCoveredByThisReturn['corporationTax'] !== null) {
+            $xw->writeElement('CorporationTax', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['corporationTax']));
+        }
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['incomeTax']) && $this->repaymentsForThePeriodCoveredByThisReturn['incomeTax'] !== null) {
+            $xw->writeElement('IncomeTax', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['incomeTax']));
+        }
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit'] !== null) {
+            $xw->writeElement('RandDTaxCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit']));
+        }
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit'] !== null) {
+            $xw->writeElement('RandDExpenditureCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit']));
+        }
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit'] !== null) {
+            $xw->writeElement('CreativeCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit']));
+        }
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC']) && $this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC'] !== null) {
+            $xw->writeElement('PayableAVECandVGEC', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC']));
+        }
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit'] !== null) {
+            $xw->writeElement('LandRemediationCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit']));
+        }
+        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit'] !== null) {
+            $xw->writeElement('PayableCapitalAllowancesFirstYearCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit']));
+        }
+        $xw->endElement(); // RepaymentsForThePeriodCoveredByThisReturn
     }
     if ($this->surrender !== null) {
         $xw->startElement('Surrender');
-        $xw->endElement();
+        $xw->writeElement('Amount', $this->money($this->surrender['amount']));
+        $xw->startElement('JointNotice');
+        if ($this->surrender['jointNoticeStatus'] === 'attached') {
+            $xw->writeElement('Attached', 'yes');
+        } else {
+            $xw->writeElement('WillFollow', 'yes');
+        }
+        $xw->endElement(); // JointNotice
+        if (isset($this->surrender['stopUntilNotice']) && $this->surrender['stopUntilNotice'] !== null) {
+            $xw->writeElement('StopUntilNotice', $this->money($this->surrender['stopUntilNotice']));
+        }
+        $xw->endElement(); // Surrender
     }
     if ($this->bankAccountDetails !== null) {
         $xw->startElement('BankAccountDetails');
+        $xw->writeElement('BankName', $this->bankAccountDetails['bankName']);
+        $xw->writeElement('SortCode', $this->bankAccountDetails['sortCode']);
+        $xw->writeElement('AccountNumber', $this->bankAccountDetails['accountNumber']);
+        $xw->writeElement('AccountName', $this->bankAccountDetails['accountName']);
+        if (!empty($this->bankAccountDetails['buildingSocReference'])) {
+            $xw->writeElement('BuildingSocReference', $this->bankAccountDetails['buildingSocReference']);
+        }
         $xw->endElement();
     }
     if ($this->rAndDCreditWithCondition !== null) $xw->writeElement('RAndDCreditWithCondition', $this->rAndDCreditWithCondition);
     if ($this->paymentToPerson !== null) {
         $xw->startElement('PaymentToPerson');
-        $xw->endElement();
+        $xw->writeElement('Recipient', $this->paymentToPerson['recipient']);
+        
+        // Address structure
+        $xw->startElement('Address');
+        // Line elements (2-3 required)
+        foreach ($this->paymentToPerson['address']['lines'] as $line) {
+            if (!empty($line)) {
+                $xw->writeElement('Line', $line);
+            }
+        }
+        // Optional PostCode
+        if (!empty($this->paymentToPerson['address']['postCode'])) {
+            $xw->writeElement('PostCode', $this->paymentToPerson['address']['postCode']);
+        }
+        $xw->endElement(); // Address
+        
+        $xw->writeElement('NomineeReference', $this->paymentToPerson['nomineeReference']);
+        $xw->endElement(); // PaymentToPerson
     }
     $xw->endElement();
 
@@ -2029,21 +2138,131 @@ class CT600 extends GovTalk
         $this->addCT600ESupplementaryForm($xw);
     }
 
-    if ($this->attachedFiles !== null) {
+    // Write attachments if any exist
+    if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments) || !empty($this->pdfAttachments) || !empty($this->additionalPdf)) {
         $xw->startElement('AttachedFiles');
-        $xw->endElement();
+        
+        // Schema choice: EITHER multiple Attachments (PDFs) OR XBRLsubmission + optional Attachments
+        
+        // If we have iXBRL attachments, use XBRLsubmission structure
+        if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments)) {
+            // Schema requires ONE XBRLsubmission element containing EITHER:
+            // - Just Accounts alone
+            // - OR Computation followed by optional Accounts (sequence)
+            $xw->startElement('XBRLsubmission');
+            
+            // If we have computations, write them first (required when both exist)
+            if (!empty($this->computationsIxbrlAttachments)) {
+                foreach ($this->computationsIxbrlAttachments as $attachment) {
+                    if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
+                        $xw->startElement('Computation');
+                        $xw->startElement('Instance');
+                        $xw->startElement('EncodedInlineXBRLDocument');
+                        
+                        if (isset($attachment['filename'])) {
+                            $xw->writeAttribute('Filename', $attachment['filename']);
+                        }
+                        if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
+                            $xw->writeAttribute('entryPoint', 'yes');
+                        }
+                        
+                        // Write the iXBRL content as base64
+                        $xw->text(base64_encode($attachment['content']));
+                        
+                        $xw->endElement(); // EncodedInlineXBRLDocument
+                        $xw->endElement(); // Instance
+                        $xw->endElement(); // Computation
+                    }
+                }
+            }
+            
+            // Then write accounts (can be alone or after computation)
+            if (!empty($this->accountsIxbrlAttachments)) {
+                foreach ($this->accountsIxbrlAttachments as $attachment) {
+                    if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
+                        $xw->startElement('Accounts');
+                        $xw->startElement('Instance');
+                        $xw->startElement('EncodedInlineXBRLDocument');
+                        
+                        if (isset($attachment['filename'])) {
+                            $xw->writeAttribute('Filename', $attachment['filename']);
+                        }
+                        if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
+                            $xw->writeAttribute('entryPoint', 'yes');
+                        }
+                        
+                        // Write the iXBRL content as base64
+                        $xw->text(base64_encode($attachment['content']));
+                        
+                        $xw->endElement(); // EncodedInlineXBRLDocument
+                        $xw->endElement(); // Instance
+                        $xw->endElement(); // Accounts
+                    }
+                }
+            }
+            
+            $xw->endElement(); // XBRLsubmission
+        }
+        
+        // Write PDF attachments (can be standalone or after XBRLsubmission)
+        // Used when NoAccountsReason is "Other - PDF attached with explanation"
+        if (!empty($this->pdfAttachments)) {
+            foreach ($this->pdfAttachments as $attachment) {
+                $xw->startElement('Attachment');
+                
+                // Required attributes
+                $xw->writeAttribute('Filename', $attachment['filename']);
+                $xw->writeAttribute('Format', $attachment['format']); // 'pdf' or 'esef'
+                $xw->writeAttribute('Type', $attachment['type']); // 'accounts', 'computations', 'other', etc.
+                
+                // Optional attributes
+                if (!empty($attachment['description'])) {
+                    $xw->writeAttribute('Description', $attachment['description']);
+                }
+                if (isset($attachment['size'])) {
+                    $xw->writeAttribute('Size', $attachment['size']);
+                }
+                
+                // Write the base64 encoded content directly (simple type with base64Binary)
+                $xw->text($attachment['content']);
+                
+                $xw->endElement(); // Attachment
+            }
+        }
+        
+        // Write additional pdf documents as Attachment elements with format='esef' and type='other'
+        if (!empty($this->additionalPdf)) {
+            foreach ($this->additionalPdf as $attachment) {
+                $xw->startElement('Attachment');
+                
+                // Required attributes
+                $xw->writeAttribute('Filename', $attachment['filename']);
+                $xw->writeAttribute('Format', 'pdf');
+                $xw->writeAttribute('Type', 'other');
+                
+                // Optional attributes - can add description if needed
+                
+                // Write the base64 encoded iXBRL content
+                $xw->text(base64_encode($attachment['content']));
+                
+                $xw->endElement(); // Attachment
+            }
+        }
+        
+        $xw->endElement(); // AttachedFiles
     }
 
     $xw->endElement(); // CompanyTaxReturn
+
     $xw->endElement(); // IRenvelope
 
     return $xw->outputMemory(true);
-    }    
+}
 
-    /**
-     * Add CT600E Charity supplementary form to XML
-     */
-    private function addCT600ESupplementaryForm(XMLWriter $xw): void
+/**
+ * Add CT600E Charity supplementary form to XML
+ */
+private function addCT600ESupplementaryForm(XMLWriter $xw): void
     {
         $xw->startElement('Charity');
         
