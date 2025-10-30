@@ -43,6 +43,7 @@ This library supports multiple HMRC APIs and submission types:
 ### XML Gateway Submissions - GovTalk Protocol
 - **[Gift Aid Claims](#gift-aid)** - Charity repayment claims with Small Donations Scheme
 - **[PAYE RTI](#paye-rti-fps-new)** - Full Payment Submission (FPS), Employer Payment Summary (EPS), NINO Verification (NVR)
+- **[PAYE P6/P9 Monitoring](#paye-p6p9-tax-code-monitoring)** - Automated daily monitoring of tax code changes
 - **[CIS Monthly Return](#cis-monthly-return-cis300--v12-schema)** - CIS300 monthly return submissions
 - **[Corporation Tax (CT600)](#corporation-tax-ct600--full-elementattribute-coverage-v1993)** - CT600 submissions with full v1.993 schema
 
@@ -495,6 +496,419 @@ $resp = $nvr->submit();
 ```
 
 Limitations (EPS & NVR): schema coverage is partial; advanced validation and error surfacing still maturing.
+
+---
+
+## PAYE P6/P9 Tax Code Monitoring
+
+**Automated daily monitoring of HMRC P6/P9 tax code changes for your employees**
+
+### What are P6/P9 Notices?
+
+- **P6**: Tax code change notice issued during the tax year when an employee's tax code changes
+- **P9**: Tax code notice issued at the start of a new tax year
+
+HMRC sends P6/P9 notices to employers when employee tax codes change. These changes must be applied to your payroll system to ensure correct tax deduction.
+
+### Important Note
+
+**P6/P9 notices are received FROM HMRC, not submitted TO HMRC.** There is no HMRC API to actively retrieve P6/P9 notices. This monitoring system works by:
+
+1. **Email Parsing** (Recommended): Automatically parses P6/P9 notices from HMRC emails
+2. **OAuth2 API Checking**: Checks employee tax codes via HMRC API and detects changes
+
+### Features
+
+- ✅ **Automated Daily Checks** - Scheduled job runs daily to check for new P6/P9 notices
+- ✅ **Email Parsing** - Automatically detects and parses HMRC P6/P9 emails via IMAP
+- ✅ **Change Detection** - Compares with previous records to identify tax code changes
+- ✅ **Email Notifications** - Sends formatted alerts when changes are detected
+- ✅ **CSV Export** - Exports notices to CSV for record-keeping
+- ✅ **Manual Checking** - Artisan command for on-demand checks
+- ✅ **Laravel Integration** - Full Laravel job queue and scheduling support
+
+### Installation
+
+1. **Publish Configuration**
+
+```php
+// Add to config/hmrc-p6p9.php or copy from package
+return require __DIR__.'/../vendor/shynne109/hmrc/config/hmrc-p6p9.php';
+```
+
+2. **Add Environment Variables**
+
+```env
+# Enable P6/P9 monitoring
+HMRC_P6P9_ENABLED=true
+
+# Email configuration (for parsing HMRC emails)
+HMRC_P6P9_METHOD=email
+HMRC_P6P9_EMAIL_HOST=imap.gmail.com
+HMRC_P6P9_EMAIL_USERNAME=your-payroll@company.com
+HMRC_P6P9_EMAIL_PASSWORD=your-app-password
+HMRC_P6P9_EMAIL_FOLDER=INBOX
+
+# Notification recipients
+HMRC_P6P9_NOTIFY_TO=payroll@company.com,admin@company.com
+```
+
+See `.env.p6p9.example` for all available options.
+
+3. **Register Scheduled Job**
+
+Add to `app/Console/Kernel.php`:
+
+```php
+protected function schedule(Schedule $schedule)
+{
+    // Check P6/P9 daily at 6 AM
+    $schedule->job(new \HMRC\PAYE\Laravel\Jobs\CheckP6P9TaxCodesJob)
+             ->dailyAt('06:00')
+             ->name('check-hmrc-p6p9')
+             ->withoutOverlapping();
+}
+```
+
+4. **Register Artisan Command** (Optional)
+
+Add to `app/Console/Kernel.php`:
+
+```php
+protected $commands = [
+    \HMRC\PAYE\Laravel\Commands\CheckP6P9Command::class,
+];
+```
+
+### Email Setup (Gmail Example)
+
+For Gmail, you need to create an **App Password**:
+
+1. Enable 2-Factor Authentication on your Google account
+2. Go to **Google Account** → **Security** → **App Passwords**
+3. Generate a password for "Mail"
+4. Use this password in `HMRC_P6P9_EMAIL_PASSWORD`
+
+**Recommended**: Create a dedicated email account for receiving HMRC notices.
+
+### Usage
+
+#### Automated Daily Checks
+
+Once configured, the system automatically checks for P6/P9 notices daily. No manual intervention required!
+
+The job will:
+- Connect to your email inbox
+- Search for HMRC P6/P9 emails
+- Parse tax code information
+- Detect changes from previous records
+- Send email notifications
+- Export to CSV
+
+#### Manual Checking
+
+Run the Artisan command for on-demand checks:
+
+```bash
+# Check via email parsing
+php artisan hmrc:check-p6p9 --method=email
+
+# Check specific employee via API
+php artisan hmrc:check-p6p9 --method=api --nino=AB123456C
+
+# Export results to CSV
+php artisan hmrc:check-p6p9 --export
+
+# Send email notifications
+php artisan hmrc:check-p6p9 --notify
+```
+
+#### Programmatic Usage
+
+```php
+use HMRC\PAYE\P6P9Monitor;
+use HMRC\PAYE\P6P9EmailParser;
+use Illuminate\Support\Facades\Log;
+
+// Initialize monitor
+$monitor = new P6P9Monitor(
+    config('hmrc.oauth2.client_id'),
+    config('hmrc.oauth2.client_secret'),
+    config('hmrc.oauth2.redirect_uri'),
+    Log::channel('daily')
+);
+
+// Method 1: Email Parsing (Recommended)
+$parser = new P6P9EmailParser($monitor, Log::channel('daily'));
+
+$parser->connect(
+    'imap.gmail.com',
+    'payroll@company.com',
+    'app-password',
+    'INBOX',
+    true
+);
+
+// Fetch unread P6/P9 emails
+$notices = $parser->fetchUnreadNotices();
+
+foreach ($notices as $notice) {
+    echo "NINO: {$notice['nino']}\n";
+    echo "Tax Code: {$notice['taxCode']}\n";
+    echo "Effective: {$notice['effectiveDate']}\n";
+    
+    if (!empty($notice['changes'])) {
+        echo "CHANGES DETECTED:\n";
+        foreach ($notice['changes'] as $field => $change) {
+            echo "  {$field}: {$change['old']} → {$change['new']}\n";
+        }
+    }
+}
+
+$parser->disconnect();
+
+// Method 2: API Checking
+$result = $monitor->checkEmployeeTaxCode('AB123456C');
+
+if ($result['status'] === 'success') {
+    $notice = $result['notice'];
+    
+    if (!empty($result['changes'])) {
+        echo "Tax code changed!\n";
+        print_r($result['changes']);
+    } else {
+        echo "No changes detected\n";
+    }
+}
+
+// Method 3: Check Multiple Employees
+$employees = ['AB123456C', 'CD789012E', 'EF345678G'];
+$results = $monitor->checkMultipleEmployees($employees);
+
+foreach ($results as $nino => $result) {
+    echo "{$nino}: {$result['status']}\n";
+}
+
+// Generate Change Report
+$report = $monitor->generateChangeReport('2025-01-01', '2025-01-31');
+
+echo "Period: {$report['period']['start']} to {$report['period']['end']}\n";
+echo "Total Notices: {$report['totalNotices']}\n";
+echo "Changes Detected: {$report['changesCount']}\n";
+```
+
+#### Import from CSV
+
+```php
+$monitor->importFromCSV('/path/to/p6p9-notices.csv');
+```
+
+CSV Format:
+```csv
+NINO,TaxCode,EffectiveDate,WeekMonth,NoticeType
+AB123456C,1257L,2025-04-06,1,P9
+CD789012E,1100L,2025-01-15,40,P6
+```
+
+### Email Notification
+
+When changes are detected, recipients receive a formatted HTML email with:
+
+- Summary of all changes
+- Detailed breakdown per employee
+- Old vs new values highlighted
+- Action steps for payroll team
+
+Example notification preview:
+
+```
+🔔 HMRC P6/P9 Tax Code Changes Detected
+
+⚠️ Action Required: 3 employee tax code changes have been detected.
+
+┌─────────────┬──────────┬────────────────┬──────┬─────────┐
+│ NINO        │ Tax Code │ Effective Date │ Type │ Status  │
+├─────────────┼──────────┼────────────────┼──────┼─────────┤
+│ AB123456C   │ 1257L    │ 2025-04-06     │ P9   │ CHANGED │
+│ CD789012E   │ 1100L    │ 2025-01-15     │ P6   │ CHANGED │
+│ EF345678G   │ BR       │ 2025-02-01     │ P6   │ NEW     │
+└─────────────┴──────────┴────────────────┴──────┴─────────┘
+
+Changes detected for AB123456C:
+  • Tax Code: 1250L → 1257L
+  • Effective Date: 2024-04-06 → 2025-04-06
+```
+
+### Configuration Options
+
+Full configuration in `config/hmrc-p6p9.php`:
+
+```php
+return [
+    'enabled' => true,
+    'check_method' => 'email', // 'email' or 'api'
+    
+    'email' => [
+        'enabled' => true,
+        'host' => 'imap.gmail.com',
+        'username' => env('HMRC_P6P9_EMAIL_USERNAME'),
+        'password' => env('HMRC_P6P9_EMAIL_PASSWORD'),
+        'folder' => 'INBOX',
+        'fetch_method' => 'unread', // 'unread', 'today', 'since'
+    ],
+    
+    'api' => [
+        'enabled' => false,
+        'employees' => [], // Array of NINOs
+        'use_database' => false,
+        'employee_model' => 'App\\Models\\Employee',
+        'csv_file' => null,
+    ],
+    
+    'schedule' => [
+        'frequency' => 'daily',
+        'time' => '06:00',
+    ],
+    
+    'notifications' => [
+        'enabled' => true,
+        'recipients' => ['payroll@company.com'],
+        'send_on_failure' => true,
+    ],
+    
+    'export' => [
+        'enabled' => true,
+        'path' => storage_path('app/hmrc/p6p9'),
+        'retention_days' => 90,
+    ],
+    
+    'cache' => [
+        'ttl' => 604800, // 7 days
+        'prefix' => 'hmrc_p6p9_',
+    ],
+];
+```
+
+### How It Works
+
+#### Email Parsing Flow
+
+1. **Daily Schedule** - Laravel scheduler runs job at configured time (default: 6 AM)
+2. **Connect to Email** - IMAP connection to configured inbox
+3. **Search for P6/P9** - Searches for emails from `noreply@tax.service.gov.uk` with P6/P9 keywords
+4. **Parse Content** - Extracts NINO, tax code, effective date, notice type
+5. **Compare with Cache** - Checks previous records in Laravel cache
+6. **Detect Changes** - Identifies what has changed (tax code, effective date, etc.)
+7. **Store Notice** - Caches parsed data for future comparison
+8. **Send Notifications** - Emails payroll team if changes detected
+9. **Export to CSV** - Saves records for audit trail
+10. **Mark Processed** - Marks emails as read and flagged
+
+#### API Checking Flow
+
+1. **Load Employee List** - From config, database, or CSV
+2. **OAuth2 Authentication** - Uses your HMRC API credentials
+3. **Query PAYE API** - Fetches current tax code for each employee
+4. **Compare with Cache** - Checks against previous records
+5. **Detect Changes** - Identifies differences
+6. **Process Results** - Notifications and export
+
+### Troubleshooting
+
+#### Email Connection Failed
+
+```
+Failed to connect to email server
+```
+
+**Solutions:**
+- Verify IMAP host, username, password
+- For Gmail: Use App Password, not regular password
+- Check SSL setting (default: `true`)
+- Ensure IMAP is enabled in email account settings
+
+#### No P6/P9 Emails Found
+
+```
+No P6/P9 emails found since [date]
+```
+
+**Solutions:**
+- Check email folder (default: `INBOX`)
+- Verify `fetch_method` setting (`unread`, `today`, `since`)
+- Ensure HMRC emails are not going to spam/junk
+- Check sender address: `noreply@tax.service.gov.uk`
+
+#### Failed to Parse Email
+
+```
+Failed to process email [ID]
+```
+
+**Solutions:**
+- HMRC email format may have changed
+- Check logs for detailed error: `storage/logs/laravel.log`
+- Email might not be a P6/P9 notice (false positive)
+
+#### API Authentication Failed
+
+```
+OAuth2 authentication failed
+```
+
+**Solutions:**
+- Verify `HMRC_OAUTH2_CLIENT_ID` and `HMRC_OAUTH2_CLIENT_SECRET`
+- Check OAuth2 redirect URI matches HMRC application settings
+- Ensure access token hasn't expired (refresh if needed)
+
+### Security Considerations
+
+1. **Email Credentials** - Store in `.env`, never commit to version control
+2. **IMAP Password** - Use App Passwords, not main account passwords
+3. **API Credentials** - Secure OAuth2 credentials properly
+4. **Notification Recipients** - Limit to authorized personnel
+5. **CSV Exports** - Store in non-public directory (`storage/app`)
+6. **Log Sensitive Data** - Avoid logging full NINOs (mask if needed)
+
+### Testing
+
+```bash
+# Test email connection
+php artisan tinker
+>>> $parser = new \HMRC\PAYE\P6P9EmailParser(
+...     new \HMRC\PAYE\P6P9Monitor('client_id', 'secret', 'redirect')
+... );
+>>> $parser->connect('imap.gmail.com', 'user', 'pass');
+>>> $parser->getMailboxInfo();
+
+# Test API checking
+php artisan tinker
+>>> $monitor = new \HMRC\PAYE\P6P9Monitor('client_id', 'secret', 'redirect');
+>>> $result = $monitor->checkEmployeeTaxCode('AB123456C');
+>>> print_r($result);
+
+# Run scheduled job manually
+php artisan schedule:run
+
+# Test notification
+php artisan hmrc:check-p6p9 --notify
+```
+
+### Best Practices
+
+1. **Dedicated Email Account** - Create a separate email for HMRC notices
+2. **Daily Scheduling** - Run checks early morning before payroll processing
+3. **Multiple Recipients** - Configure backup notification recipients
+4. **Regular Exports** - Keep CSV exports for audit compliance
+5. **Monitor Logs** - Check `storage/logs` for errors regularly
+6. **Test Before Production** - Use sandbox credentials for testing
+7. **Backup Strategy** - Export and archive P6/P9 records regularly
+
+### Support & Resources
+
+- **HMRC P6/P9 Guide**: [https://www.gov.uk/guidance/p6-and-p9-tax-codes](https://www.gov.uk/guidance/p6-and-p9-tax-codes)
+- **PAYE RTI Documentation**: [https://www.gov.uk/government/collections/real-time-information-online-internet-submissions](https://www.gov.uk/government/collections/real-time-information-online-internet-submissions)
+- **Tax Codes Explained**: [https://www.gov.uk/tax-codes](https://www.gov.uk/tax-codes)
 
 ---
 
