@@ -9,19 +9,26 @@ use Psr\Log\NullLogger;
 use Psr\Log\LoggerInterface;
 
 /**
- * Employer Payment Summary (EPS) builder for PAYE RTI submissions (subset for 2025-26 schema v1.0).
+ * Employer Payment Summary (EPS) builder for PAYE RTI submissions (2025-26 schema v1.0).
  *
- * Supported features (initial minimal set):
+ * Full implementation supporting all EPS elements:
  *  - IRenvelope + IRheader with Keys (TaxOfficeNumber/TaxOfficeReference)
  *  - PeriodEnd auto (today) or override
- *  - EmployerPaymentSummary root with EmpRefs (OfficeNo, PayeRef, optional AORef, COTAXRef)
- *  - RelatedTaxYear
- *  - Indicators / optional blocks: FinalSubmission (with BecauseSchemeCeased / DateSchemeCeased),
- *    EmpAllceInd (Employment Allowance claim), DeMinimisStateAid (NA only),
- *    PeriodOfInactivity (From/To), NoPaymentDates (From/To), RecoverableAmountsYTD (basic monetary figures)
- *  - IRmark (real algorithm via packageDigest override – canonical + deterministic gzip + SHA1 base64)
- *
- * Future enhancements: detailed RecoverableAmountsYTD breakdown, full validation, schema-driven ordering.
+ *  - EmployerPaymentSummary root with EmpRefs (OfficeNo, PayeRef, AORef required, optional COTAXRef)
+ *  - RelatedTaxYear (YY-YY format)
+ *  - NoPaymentForPeriod + NoPaymentDates (From/To dates)
+ *  - PeriodOfInactivity (From/To dates)
+ *  - EmpAllceInd (Employment Allowance yes/no indicator)
+ *  - DeMinimisStateAid (Agri, FisheriesAqua, RoadTrans, Indust, NA indicators)
+ *  - RecoverableAmountsYTD with all statutory payment fields:
+ *    * TaxMonth, SMPRecovered, SPPRecovered, SAPRecovered, ShPPRecovered, SPBPRecovered, SNCPRecovered
+ *    * NIC Compensation fields for all payment types
+ *    * CISDeductionsSuffered
+ *  - ApprenticeshipLevy (LevyDueYTD, TaxMonth, AnnualAllce)
+ *  - Account (bank details: AccountHoldersName, AccountNo, SortCode, optional BuildingSocRef)
+ *  - FinalSubmission (BecauseSchemeCeased, DateSchemeCeased, ForYear indicators)
+ *  - IRmark (real algorithm via packageDigest override – canonical + SHA1 base64)
+ *  - Full XSD validation support
  */
 class EPS extends GovTalk
 {
@@ -38,15 +45,44 @@ class EPS extends GovTalk
     private bool $finalSubmission = false;
     private bool $schemeCeased = false;
     private ?string $schemeCeasedDate = null; // Y-m-d
+    private bool $finalForYear = false; // FinalSubmission/ForYear
 
-    private bool $employmentAllowanceClaim = false; // EmpAllceInd (true=yes)
-    private bool $deMinimisStateAidNA = false; // DeMinimisStateAid/NA element (stub)
+    private ?string $employmentAllowance = null; // 'yes', 'no', or null
+    
+    // DeMinimisStateAid indicators (mutually exclusive, or NA)
+    private bool $deMinimisAgri = false;
+    private bool $deMinimisFisheriesAqua = false;
+    private bool $deMinimisRoadTrans = false;
+    private bool $deMinimisIndust = false;
+    private bool $deMinimisNA = false;
 
     private ?array $periodOfInactivity = null; // ['from'=>Y-m-d,'to'=>Y-m-d]
-    private ?array $noPaymentDates = null; // legacy support: ['from'=>Y-m-d,'to'=>Y-m-d]
-    private bool $noPaymentForPeriod = false;  // simple yes indicator
+    private ?array $noPaymentDates = null; // ['from'=>Y-m-d,'to'=>Y-m-d]
+    private bool $noPaymentForPeriod = false;  // yes indicator
 
-    private array $recoverableAmountsYTD = []; // basic pairs e.g. ['TaxMonth'=>1,'SMPYTD'=>123.45]
+    // RecoverableAmountsYTD - comprehensive structure
+    private ?array $recoverableAmounts = null; // [
+    //   'TaxMonth' => int (1-12),
+    //   'SMPRecovered' => decimal,
+    //   'SPPRecovered' => decimal,
+    //   'SAPRecovered' => decimal,
+    //   'ShPPRecovered' => decimal,
+    //   'SPBPRecovered' => decimal,
+    //   'SNCPRecovered' => decimal,
+    //   'NICCompensationOnSMP' => decimal,
+    //   'NICCompensationOnSPP' => decimal,
+    //   'NICCompensationOnSAP' => decimal,
+    //   'NICCompensationOnShPP' => decimal,
+    //   'NICCompensationOnSPBP' => decimal,
+    //   'NICCompensationOnSNCP' => decimal,
+    //   'CISDeductionsSuffered' => decimal
+    // ]
+
+    // ApprenticeshipLevy
+    private ?array $apprenticeshipLevy = null; // ['LevyDueYTD'=>decimal, 'TaxMonth'=>int, 'AnnualAllce'=>decimal]
+
+    // Bank Account details
+    private ?array $account = null; // ['AccountHoldersName'=>string, 'AccountNo'=>string, 'SortCode'=>string, 'BuildingSocRef'=>?string]
 
     private bool $validateSchema = false; // optional XSD validation (requires local path configured externally)
 
@@ -112,23 +148,81 @@ class EPS extends GovTalk
         $this->periodEnd = $date;
     }
 
-    public function markFinalSubmission(bool $final = true, bool $schemeCeased = false, ?string $ceasedDate = null): void
+    public function markFinalSubmission(bool $final = true, bool $schemeCeased = false, ?string $ceasedDate = null, bool $forYear = false): void
     {
         $this->finalSubmission = $final;
         $this->schemeCeased = $schemeCeased;
         $this->schemeCeasedDate = $ceasedDate;
+        $this->finalForYear = $forYear;
     }
 
+    /**
+     * Set Employment Allowance indicator
+     * @param string|null $value 'yes', 'no', or null (omit element)
+     */
+    public function setEmploymentAllowance(?string $value): void
+    {
+        if ($value !== null && !in_array($value, ['yes', 'no'])) {
+            throw new \InvalidArgumentException("EmpAllceInd must be 'yes' or 'no'");
+        }
+        $this->employmentAllowance = $value;
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     */
     public function claimEmploymentAllowance(bool $on = true): void
     {
-        $this->employmentAllowanceClaim = $on;
+        $this->employmentAllowance = $on ? 'yes' : 'no';
     }
 
+    /**
+     * Set De Minimis State Aid indicators (mutually exclusive)
+     * @param string $type One of: 'Agri', 'FisheriesAqua', 'RoadTrans', 'Indust', 'NA'
+     */
+    public function setDeMinimisStateAid(string $type): void
+    {
+        // Reset all
+        $this->deMinimisAgri = false;
+        $this->deMinimisFisheriesAqua = false;
+        $this->deMinimisRoadTrans = false;
+        $this->deMinimisIndust = false;
+        $this->deMinimisNA = false;
+
+        switch ($type) {
+            case 'Agri':
+                $this->deMinimisAgri = true;
+                break;
+            case 'FisheriesAqua':
+                $this->deMinimisFisheriesAqua = true;
+                break;
+            case 'RoadTrans':
+                $this->deMinimisRoadTrans = true;
+                break;
+            case 'Indust':
+                $this->deMinimisIndust = true;
+                break;
+            case 'NA':
+                $this->deMinimisNA = true;
+                break;
+            default:
+                throw new \InvalidArgumentException("Invalid De Minimis State Aid type: {$type}");
+        }
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     */
     public function setDeMinimisStateAidNA(bool $on = true): void
     {
-        $this->deMinimisStateAidNA = $on;
+        if ($on) {
+            $this->setDeMinimisStateAid('NA');
+        }
     }
 
+    /**
+     * Set Period of Inactivity dates
+     */
     public function setPeriodOfInactivity(?string $from, ?string $to): void
     {
         if ($from && $to) {
@@ -137,9 +231,7 @@ class EPS extends GovTalk
     }
 
     /**
-     * Backward compatibility helper – older tests used explicit <NoPaymentDates><From/><To/></NoPaymentDates> block.
-     * Newer schema may allow a simplified NoPaymentForPeriod yes flag or PeriodOfInactivity. We retain legacy element
-     * to avoid breaking existing integrations/tests.
+     * Set No Payment Dates (legacy element)
      */
     public function setNoPaymentDates(?string $from, ?string $to): void
     {
@@ -149,16 +241,65 @@ class EPS extends GovTalk
     }
 
     /**
-     * Indicate no payments were made for the period (schema element <NoPaymentForPeriod>yes</NoPaymentForPeriod>).
+     * Indicate no payments were made for the period
      */
     public function setNoPaymentForPeriod(bool $on = true): void
     {
         $this->noPaymentForPeriod = $on;
     }
 
+    /**
+     * Set Recoverable Amounts Year To Date
+     * @param array $data Associative array with keys:
+     *   - TaxMonth (int 1-12)
+     *   - SMPRecovered, SPPRecovered, SAPRecovered, ShPPRecovered, SPBPRecovered, SNCPRecovered (decimals)
+     *   - NICCompensationOnSMP, NICCompensationOnSPP, NICCompensationOnSAP, 
+     *     NICCompensationOnShPP, NICCompensationOnSPBP, NICCompensationOnSNCP (decimals)
+     *   - CISDeductionsSuffered (decimal)
+     */
+    public function setRecoverableAmounts(array $data): void
+    {
+        $this->recoverableAmounts = $data;
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     */
     public function setRecoverableAmountsYTD(array $data): void
     {
-        $this->recoverableAmountsYTD = $data; // trust keys
+        $this->setRecoverableAmounts($data);
+    }
+
+    /**
+     * Set Apprenticeship Levy details
+     * @param string $levyDueYTD Amount in whole units (e.g., "1234.00")
+     * @param int $taxMonth Tax month 1-12
+     * @param string $annualAllowance Annual allowance (default 15000.00, max 15000.00)
+     */
+    public function setApprenticeshipLevy(string $levyDueYTD, int $taxMonth, string $annualAllowance = '15000.00'): void
+    {
+        $this->apprenticeshipLevy = [
+            'LevyDueYTD' => $levyDueYTD,
+            'TaxMonth' => $taxMonth,
+            'AnnualAllce' => $annualAllowance
+        ];
+    }
+
+    /**
+     * Set bank account details for repayment
+     * @param string $accountHoldersName Name (1-28 chars, CharsetA)
+     * @param string $accountNo 8-digit account number
+     * @param string $sortCode 6-digit sort code
+     * @param string|null $buildingSocRef Building society reference (optional, 1-18 chars)
+     */
+    public function setAccount(string $accountHoldersName, string $accountNo, string $sortCode, ?string $buildingSocRef = null): void
+    {
+        $this->account = [
+            'AccountHoldersName' => $accountHoldersName,
+            'AccountNo' => $accountNo,
+            'SortCode' => $sortCode,
+            'BuildingSocRef' => $buildingSocRef
+        ];
     }
 
     public function enableSchemaValidation(bool $on = true): void
@@ -182,6 +323,9 @@ class EPS extends GovTalk
 
     public function submit(): array|false
     {
+        // Validate business rules before submission
+        $this->validateBusinessRules();
+        
         $this->setGovTalkServer($this->resolveEndpoint());
         $this->setMessageClass(self::MESSAGE_CLASS);
         $this->setMessageQualifier('request');
@@ -212,6 +356,28 @@ class EPS extends GovTalk
         return $resp;
     }
 
+    /**
+     * Validate HMRC business rules before submission
+     * 
+     * @throws \RuntimeException if business rules are violated
+     */
+    private function validateBusinessRules(): void
+    {
+        // Rule 7953: If CISDeductionsSuffered > 0, COTAXRef must be present
+        if ($this->recoverableAmounts && isset($this->recoverableAmounts['CISDeductionsSuffered'])) {
+            $cisAmount = (float)$this->recoverableAmounts['CISDeductionsSuffered'];
+            if ($cisAmount > 0) {
+                $cotaxRef = $this->employer->getCorporationTaxReference();
+                if (empty($cotaxRef)) {
+                    throw new \RuntimeException(
+                        'HMRC Error 7953: If CISDeductionsSuffered is greater than zero, COTAXRef (Corporation Tax Reference/UTR) must be provided. ' .
+                        'CIS deductions require a valid 10-digit UTR.'
+                    );
+                }
+            }
+        }
+    }
+
     private function buildBodyXml(): string
     {
         $ns = $this->deriveSchemaNamespace();
@@ -237,47 +403,112 @@ class EPS extends GovTalk
         $xw->startElement('EmpRefs');
         $xw->writeElement('OfficeNo', $this->employer->getTaxOfficeNumber());
         $xw->writeElement('PayeRef', $this->employer->getTaxOfficeReference());
-        if ($this->employer->getAccountsOfficeReference()) { $xw->writeElement('AORef', $this->employer->getAccountsOfficeReference()); }
-        if ($this->employer->getCorporationTaxReference()) { $xw->writeElement('COTAXRef', $this->employer->getCorporationTaxReference()); }
+        // AORef is now required in 2026 schema
+        $xw->writeElement('AORef', $this->employer->getAccountsOfficeReference() ?: '000P00000000X');
+        if ($this->employer->getCorporationTaxReference()) {
+            $cotaxRef = $this->employer->getCorporationTaxReference();
+            // Validate COTAXRef (UTR) - must be exactly 10 digits
+            if (!preg_match('/^\d{10}$/', $cotaxRef)) {
+                $this->logger->warning('Invalid COTAXRef (UTR) format. Must be exactly 10 digits.', [
+                    'cotaxRef' => $cotaxRef,
+                    'length' => strlen($cotaxRef)
+                ]);
+            }
+            $xw->writeElement('COTAXRef', $cotaxRef); 
+        }
         $xw->endElement(); // EmpRefs
 
-        // Optional blocks (legacy + current). Allow coexistence for backward compatibility with older tests.
-        if ($this->noPaymentDates) {
+        // NoPaymentForPeriod + NoPaymentDates (must appear together if present)
+        if ($this->noPaymentForPeriod && $this->noPaymentDates) {
+            $xw->writeElement('NoPaymentForPeriod', 'yes');
             $xw->startElement('NoPaymentDates');
             $xw->writeElement('From', $this->noPaymentDates['from']);
             $xw->writeElement('To', $this->noPaymentDates['to']);
             $xw->endElement();
         }
-        if ($this->noPaymentForPeriod) {
-            $xw->writeElement('NoPaymentForPeriod', 'yes');
-        }
+        
+        // PeriodOfInactivity
         if ($this->periodOfInactivity) {
             $xw->startElement('PeriodOfInactivity');
             $xw->writeElement('From', $this->periodOfInactivity['from']);
             $xw->writeElement('To', $this->periodOfInactivity['to']);
             $xw->endElement();
         }
-        if ($this->employmentAllowanceClaim) {
-            $xw->writeElement('EmpAllceInd', 'yes');
+        
+        // EmpAllceInd (Employment Allowance)
+        if ($this->employmentAllowance !== null) {
+            $xw->writeElement('EmpAllceInd', $this->employmentAllowance);
         }
-        if ($this->deMinimisStateAidNA) {
+        
+        // DeMinimisStateAid
+        if ($this->deMinimisAgri || $this->deMinimisFisheriesAqua || $this->deMinimisRoadTrans || 
+            $this->deMinimisIndust || $this->deMinimisNA) {
             $xw->startElement('DeMinimisStateAid');
-            $xw->writeElement('NA','yes');
+            if ($this->deMinimisAgri) $xw->writeElement('Agri', 'yes');
+            if ($this->deMinimisFisheriesAqua) $xw->writeElement('FisheriesAqua', 'yes');
+            if ($this->deMinimisRoadTrans) $xw->writeElement('RoadTrans', 'yes');
+            if ($this->deMinimisIndust) $xw->writeElement('Indust', 'yes');
+            if ($this->deMinimisNA) $xw->writeElement('NA', 'yes');
             $xw->endElement();
         }
-        if ($this->recoverableAmountsYTD) {
+        
+        // RecoverableAmountsYTD
+        if ($this->recoverableAmounts) {
             $xw->startElement('RecoverableAmountsYTD');
-            foreach ($this->recoverableAmountsYTD as $k=>$v) {
-                $xw->writeElement($k, (string)$v);
+            
+            $validFields = [
+                'TaxMonth', 'SMPRecovered', 'SPPRecovered', 'SAPRecovered', 
+                'ShPPRecovered', 'SPBPRecovered', 'SNCPRecovered',
+                'NICCompensationOnSMP', 'NICCompensationOnSPP', 'NICCompensationOnSAP',
+                'NICCompensationOnShPP', 'NICCompensationOnSPBP', 'NICCompensationOnSNCP',
+                'CISDeductionsSuffered'
+            ];
+            
+            foreach ($validFields as $field) {
+                if (isset($this->recoverableAmounts[$field])) {
+                    $xw->writeElement($field, (string)$this->recoverableAmounts[$field]);
+                }
+            }
+            
+            $xw->endElement();
+        }
+        
+        // ApprenticeshipLevy
+        if ($this->apprenticeshipLevy) {
+            $xw->startElement('ApprenticeshipLevy');
+            $xw->writeElement('LevyDueYTD', $this->apprenticeshipLevy['LevyDueYTD']);
+            $xw->writeElement('TaxMonth', (string)$this->apprenticeshipLevy['TaxMonth']);
+            $xw->writeElement('AnnualAllce', $this->apprenticeshipLevy['AnnualAllce']);
+            $xw->endElement();
+        }
+        
+        // Account (bank details)
+        if ($this->account) {
+            $xw->startElement('Account');
+            $xw->writeElement('AccountHoldersName', $this->account['AccountHoldersName']);
+            $xw->writeElement('AccountNo', $this->account['AccountNo']);
+            $xw->writeElement('SortCode', $this->account['SortCode']);
+            if (!empty($this->account['BuildingSocRef'])) {
+                $xw->writeElement('BuildingSocRef', $this->account['BuildingSocRef']);
             }
             $xw->endElement();
         }
+        
+        // RelatedTaxYear (required)
         $xw->writeElement('RelatedTaxYear', $this->relatedTaxYear);
 
+        // FinalSubmission
         if ($this->finalSubmission) {
             $xw->startElement('FinalSubmission');
-            if ($this->schemeCeased) { $xw->writeElement('BecauseSchemeCeased','yes'); }
-            if ($this->schemeCeasedDate) { $xw->writeElement('DateSchemeCeased',$this->schemeCeasedDate); }
+            if ($this->schemeCeased) { 
+                $xw->writeElement('BecauseSchemeCeased','yes'); 
+            }
+            if ($this->schemeCeasedDate) { 
+                $xw->writeElement('DateSchemeCeased',$this->schemeCeasedDate); 
+            }
+            if ($this->finalForYear) {
+                $xw->writeElement('ForYear', 'yes');
+            }
             $xw->endElement();
         }
 

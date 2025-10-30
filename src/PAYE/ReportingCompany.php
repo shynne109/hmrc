@@ -8,7 +8,10 @@ class ReportingCompany
     private $tax_office_number = '';
 	private $tax_office_reference = '';
 	private $accounts_office_reference = '';
-	private $corporation_tax_reference = ''; // Company Unique Taxpayer Reference, ten numbers, found on the 'Notice to deliver a company Tax Return' (form CT603).
+	// COTAXRef: Company Unique Taxpayer Reference (UTR)
+	// Must be exactly 10 digits. Found on 'Notice to deliver a company Tax Return' (form CT603)
+	// Example: 1234567890 (Note: HMRC validates this against their records)
+	private $corporation_tax_reference = '';
 
 
     public function __construct(
@@ -20,6 +23,13 @@ class ReportingCompany
         $this->tax_office_number = $taxOfficeNumber;
         $this->tax_office_reference = $taxOfficeReference;
         $this->accounts_office_reference = $accountsOfficeReference;
+        
+        // Validate COTAXRef if provided
+        if ($corporationTaxReference !== null && $corporationTaxReference !== '' && !preg_match('/^\d{10}$/', $corporationTaxReference)) {
+            throw new \InvalidArgumentException(
+                "COTAXRef (UTR) must be exactly 10 digits. Got: '$corporationTaxReference' (" . strlen($corporationTaxReference) . " characters)"
+            );
+        }
         $this->corporation_tax_reference = $corporationTaxReference;
     }
 
@@ -58,8 +68,19 @@ class ReportingCompany
         $this->accounts_office_reference = $value;
     }
 
+    /**
+     * Set Corporation Tax Reference (UTR)
+     * 
+     * @param string $value Must be exactly 10 digits
+     * @throws \InvalidArgumentException if format is invalid
+     */
     public function setCorporationTaxReference(string $value): void
     {
+        if ($value !== '' && !preg_match('/^\d{10}$/', $value)) {
+            throw new \InvalidArgumentException(
+                "COTAXRef (UTR) must be exactly 10 digits. Got: '$value' (" . strlen($value) . " characters)"
+            );
+        }
         $this->corporation_tax_reference = $value;
     }
 

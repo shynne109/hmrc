@@ -1,4 +1,5 @@
 <?php
+
 namespace HMRC\PAYE\Tests;
 
 require_once __DIR__ . '/../../bootstrap.php';
@@ -37,9 +38,13 @@ class FPSLocalServerTest extends TestCase
 
     private function isHostReachable(string $host, int $port, float $timeoutSec = 0.5): bool
     {
-        $errno = 0; $errstr = '';
+        $errno = 0;
+        $errstr = '';
         $fp = @fsockopen($host, $port, $errno, $errstr, $timeoutSec);
-        if ($fp) { fclose($fp); return true; }
+        if ($fp) {
+            fclose($fp);
+            return true;
+        }
         return false;
     }
 
@@ -190,14 +195,18 @@ class FPSLocalServerTest extends TestCase
         ]);
         $fps->addEmployee($e3);
 
-    $resp = $fps->submit();
-    fwrite(STDOUT, "\n===== BEGIN resp DUMP =====\n");
-    // Avoid overwhelming the output by summarising XML lengths alongside full array
-    $summary = $resp;
-    if (isset($summary['request_xml'])) { $summary['request_xml_length'] = strlen($summary['request_xml']); }
-    if (isset($summary['response_xml'])) { $summary['response_xml_length'] = strlen($summary['response_xml']); }
-    fwrite(STDOUT, print_r($summary, true));
-    fwrite(STDOUT, "\n===== END resp DUMP =====\n");
+        $resp = $fps->submit();
+        fwrite(STDOUT, "\n===== BEGIN resp DUMP =====\n");
+        // Avoid overwhelming the output by summarising XML lengths alongside full array
+        $summary = $resp;
+        if (isset($summary['request_xml'])) {
+            $summary['request_xml_length'] = strlen($summary['request_xml']);
+        }
+        if (isset($summary['response_xml'])) {
+            $summary['response_xml_length'] = strlen($summary['response_xml']);
+        }
+        fwrite(STDOUT, print_r($summary, true));
+        fwrite(STDOUT, "\n===== END resp DUMP =====\n");
         $this->assertNotFalse($resp, 'Submission failed or no response from LTS');
         $this->assertIsArray($resp);
         $this->assertArrayHasKey('request_xml', $resp);
@@ -227,4 +236,3 @@ class FPSLocalServerTest extends TestCase
         }
     }
 }
-

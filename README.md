@@ -456,24 +456,348 @@ The IRmark inside the GovTalk `<IRheader>` is now replaced with a real hash deri
 
 ## PAYE RTI EPS (New)
 
-Employer Payment Summary client (`HMRC\PAYE\EPS`) supports:
+**Employer Payment Summary (EPS)** - Comprehensive implementation for 2025-26 schema v1.0
 
-- Building an EPS with keys, PeriodEnd, EmpRefs, allowance indicator, de minimis state aid NA stub, inactivity and no-payment date ranges.
-- Optional FinalSubmission block with scheme ceased reason/date.
-- Simple RecoverableAmountsYTD injection (pass associative array).
-- Real IRmark generation (same algorithm as FPS).
+The `HMRC\PAYE\EPS` class provides full support for all EPS elements including:
 
-Minimal example:
+### Core Features
+
+- ✅ **IRenvelope & IRheader** - Keys, PeriodEnd, DefaultCurrency, IRmark
+- ✅ **EmpRefs** - OfficeNo, PayeRef, AORef (required), COTAXRef (optional)
+- ✅ **RelatedTaxYear** - Tax year in YY-YY format
+- ✅ **Real IRmark generation** - Same canonical XML + SHA1 algorithm as FPS
+
+### Payment & Inactivity Indicators
+
+- ✅ **NoPaymentForPeriod** - Indicator for no payments in period
+- ✅ **NoPaymentDates** - From/To date range for no payment period
+- ✅ **PeriodOfInactivity** - From/To date range for inactive periods
+
+### Allowances & State Aid
+
+- ✅ **EmpAllceInd** - Employment Allowance indicator (yes/no)
+- ✅ **DeMinimisStateAid** - Multiple sector indicators:
+  - Agri (Agriculture)
+  - FisheriesAqua (Fisheries & Aquaculture)
+  - RoadTrans (Road Transport)
+  - Indust (Industrial)
+  - NA (Not Applicable)
+
+### Recoverable Amounts Year To Date
+
+Full support for all statutory payment recoveries:
+
+- **Statutory Payments Recovered:**
+  - SMPRecovered (Statutory Maternity Pay)
+  - SPPRecovered (Statutory Paternity Pay)
+  - SAPRecovered (Statutory Adoption Pay)
+  - ShPPRecovered (Shared Parental Pay)
+  - SPBPRecovered (Statutory Parental Bereavement Pay)
+  - SNCPRecovered (Statutory Neonatal Care Pay)
+
+- **NIC Compensation:**
+  - NICCompensationOnSMP/SPP/SAP/ShPP/SPBP/SNCP
+
+- **CIS Deductions:**
+  - CISDeductionsSuffered
+
+- **TaxMonth** - Tax month indicator (1-12)
+
+### Apprenticeship Levy
+
+- ✅ **LevyDueYTD** - Levy due year to date (whole units)
+- ✅ **TaxMonth** - Tax month (1-12)
+- ✅ **AnnualAllce** - Annual allowance (default £15,000)
+
+### Bank Account Details
+
+For HMRC repayments:
+
+- ✅ **AccountHoldersName** - Account holder name (1-28 chars)
+- ✅ **AccountNo** - 8-digit account number
+- ✅ **SortCode** - 6-digit sort code
+- ✅ **BuildingSocRef** - Building society reference (optional, 1-18 chars)
+
+### Final Submission
+
+- ✅ **BecauseSchemeCeased** - Scheme ceased indicator
+- ✅ **DateSchemeCeased** - Date scheme ceased
+- ✅ **ForYear** - Final submission for entire year indicator
+
+---
+
+### Basic Example
 
 ```php
 use HMRC\PAYE\{EPS, ReportingCompany};
 
 $employer = new ReportingCompany('123', 'AB456', '123PA00123456');
-$eps = new EPS('SENDERID','password',$employer,true);
-$eps->claimEmploymentAllowance(true);
-$eps->setRecoverableAmountsYTD(['TaxMonth'=>2,'CISDeductionsSuffered'=>'123.45']);
+$eps = new EPS('SENDERID', 'password', $employer, true);
+
+// Set tax year
+$eps->setRelatedTaxYear('25-26');
+
+// Claim Employment Allowance
+$eps->setEmploymentAllowance('yes');
+
+// Set recoverable amounts
+$eps->setRecoverableAmounts([
+    'TaxMonth' => 2,
+    'CISDeductionsSuffered' => '1234.56',
+    'SMPRecovered' => '500.00',
+    'NICCompensationOnSMP' => '45.00'
+]);
+
 $response = $eps->submit();
 ```
+
+### Complete Example - All Elements
+
+```php
+use HMRC\PAYE\{EPS, ReportingCompany};
+
+// Initialize
+$employer = new ReportingCompany('123', 'AB456', '123PA00123456', '1234567890');
+$eps = new EPS('SENDERID', 'password', $employer, true);
+
+// Configure software metadata
+$eps->setSoftwareMeta('1234', 'PayrollPro', '2.0.1');
+
+// Set tax year and period
+$eps->setRelatedTaxYear('25-26');
+$eps->setPeriodEnd('2025-05-05');
+
+// Employment Allowance
+$eps->setEmploymentAllowance('yes');
+
+// De Minimis State Aid (choose one)
+$eps->setDeMinimisStateAid('Indust'); // or 'Agri', 'FisheriesAqua', 'RoadTrans', 'NA'
+
+// Recoverable Amounts - all statutory payments
+$eps->setRecoverableAmounts([
+    'TaxMonth' => 2,
+    'SMPRecovered' => '2500.00',
+    'SPPRecovered' => '800.00',
+    'SAPRecovered' => '600.00',
+    'ShPPRecovered' => '400.00',
+    'SPBPRecovered' => '200.00',
+    'SNCPRecovered' => '150.00',
+    'NICCompensationOnSMP' => '225.00',
+    'NICCompensationOnSPP' => '72.00',
+    'NICCompensationOnSAP' => '54.00',
+    'NICCompensationOnShPP' => '36.00',
+    'NICCompensationOnSPBP' => '18.00',
+    'NICCompensationOnSNCP' => '13.50',
+    'CISDeductionsSuffered' => '5000.00'
+]);
+
+// Apprenticeship Levy
+$eps->setApprenticeshipLevy(
+    '15000.00',  // Levy due YTD
+    2,           // Tax month
+    '15000.00'   // Annual allowance
+);
+
+// Bank account for repayments
+$eps->setAccount(
+    'ACME CORP LTD',      // Account holder name
+    '12345678',           // Account number
+    '123456',             // Sort code
+    'REF123'              // Building society ref (optional)
+);
+
+// Submit
+$response = $eps->submit();
+
+if ($response) {
+    echo "Correlation ID: {$response['correlation_id']}\n";
+    echo "Qualifier: {$response['qualifier']}\n";
+    
+    if (isset($response['errors'])) {
+        print_r($response['errors']);
+    }
+}
+```
+
+### No Payment Period Example
+
+```php
+$eps = new EPS('SENDERID', 'password', $employer, true);
+
+// Indicate no payment for period
+$eps->setNoPaymentForPeriod(true);
+$eps->setNoPaymentDates('2025-04-06', '2025-05-05');
+
+$response = $eps->submit();
+```
+
+### Period of Inactivity Example
+
+```php
+$eps = new EPS('SENDERID', 'password', $employer, true);
+
+// Set period of inactivity
+$eps->setPeriodOfInactivity('2025-04-06', '2026-04-05');
+
+$response = $eps->submit();
+```
+
+### Final Submission Example
+
+```php
+$eps = new EPS('SENDERID', 'password', $employer, true);
+
+// Mark as final submission with scheme ceased
+$eps->markFinalSubmission(
+    true,                    // Final submission
+    true,                    // Because scheme ceased
+    '2025-12-31',           // Date ceased
+    true                    // For entire year
+);
+
+$response = $eps->submit();
+```
+
+### Validation & Logging
+
+```php
+use Psr\Log\LogLevel;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
+
+// Enable schema validation
+$eps->enableSchemaValidation(true);
+
+// Add logging
+$logger = new Logger('eps');
+$logger->pushHandler(new StreamHandler('eps-submissions.log', LogLevel::DEBUG));
+$eps->setLogger($logger);
+
+$response = $eps->submit();
+```
+
+### API Methods Reference
+
+#### Core Configuration
+```php
+setRelatedTaxYear(string $yyDashYy)           // e.g., '25-26'
+setPeriodEnd(string $date)                     // Y-m-d format
+setSoftwareMeta(string $vendorId, string $productName, string $productVersion)
+```
+
+#### Employment Allowance & State Aid
+```php
+setEmploymentAllowance(?string $value)         // 'yes', 'no', or null
+claimEmploymentAllowance(bool $on = true)      // Legacy method
+setDeMinimisStateAid(string $type)             // 'Agri', 'FisheriesAqua', 'RoadTrans', 'Indust', 'NA'
+```
+
+#### Payment Indicators
+```php
+setNoPaymentForPeriod(bool $on = true)
+setNoPaymentDates(?string $from, ?string $to)
+setPeriodOfInactivity(?string $from, ?string $to)
+```
+
+#### Recoverable Amounts
+```php
+setRecoverableAmounts(array $data)             // All statutory payment fields
+setRecoverableAmountsYTD(array $data)          // Legacy alias
+```
+
+#### Apprenticeship Levy
+```php
+setApprenticeshipLevy(string $levyDueYTD, int $taxMonth, string $annualAllowance = '15000.00')
+```
+
+#### Bank Account
+```php
+setAccount(string $accountHoldersName, string $accountNo, string $sortCode, ?string $buildingSocRef = null)
+```
+
+#### Final Submission
+```php
+markFinalSubmission(bool $final = true, bool $schemeCeased = false, ?string $ceasedDate = null, bool $forYear = false)
+```
+
+#### Submission & Validation
+```php
+enableSchemaValidation(bool $on = true)
+setLogger(LoggerInterface $logger)
+submit(): array|false
+```
+
+### Response Structure
+
+```php
+[
+    'request_xml' => '...',           // Full request XML
+    'response_xml' => '...',          // Full response XML
+    'qualifier' => 'acknowledgement', // Response type
+    'correlation_id' => '...',        // HMRC correlation ID
+    'errors' => [...]                 // Array of errors (if any)
+]
+```
+
+### Schema Validation
+
+The EPS class validates against the official **EmployerPaymentSummary-2026-v1-0.xsd** schema. Key validation rules:
+
+- **OfficeNo**: 3 digits (e.g., "123")
+- **PayeRef**: 1-10 characters, CharsetG
+- **AORef**: 13 characters, format `[0-9]{3}P[A-Z][0-9]{7}[0-9X]`
+- **COTAXRef**: Exactly 10 digits (optional, but HMRC validates against their records if provided)
+- **RelatedTaxYear**: YY-YY format (e.g., "25-26")
+- **TaxMonth**: 1-12
+- **Monetary values**: Max 2 decimal places
+- **Dates**: YYYY-MM-DD format, within tax year range
+
+### Important Notes
+
+1. **AORef is now required** in the 2025-26 schema (was optional in earlier versions)
+2. **COTAXRef (UTR) validation** - If provided, must be exactly 10 digits and will be validated by HMRC against their records
+3. **CIS Deductions require COTAXRef** - If CISDeductionsSuffered > 0, you MUST provide a valid COTAXRef (Error 7953)
+4. **NoPaymentForPeriod and NoPaymentDates** must appear together if present
+5. **De Minimis State Aid** indicators are mutually exclusive - choose only one
+6. **IRmark** is automatically generated using canonical XML + SHA1 algorithm
+7. **PeriodEnd** defaults to current date if not specified
+8. **Apprenticeship Levy** annual allowance is typically £15,000
+9. All **monetary amounts** must be in GBP with exactly 2 decimal places
+
+### Error Handling
+
+Common validation errors:
+
+- **Invalid TaxMonth**: Must be 1-12
+- **Invalid AORef format**: Must match pattern `[0-9]{3}P[A-Z][0-9]{7}[0-9X]`
+- **Invalid COTAXRef (UTR)**: Must be exactly 10 digits, and HMRC validates it against their records (Error 7882)
+- **CIS without COTAXRef**: If CISDeductionsSuffered > 0, COTAXRef must be present (Error 7953)
+- **Invalid date range**: Must be within tax year (2025-04-06 to 2026-04-05)
+- **Missing required fields**: AORef, RelatedTaxYear
+- **Invalid monetary format**: Must have exactly 2 decimal places
+
+### Testing
+
+Test mode uses HMRC sandbox environment:
+
+```php
+$eps = new EPS('SENDERID', 'password', $employer, true); // true = test mode
+
+// Or custom test endpoint
+$eps = new EPS('SENDERID', 'password', $employer, true, 'https://custom-test-endpoint.local');
+```
+
+### Backward Compatibility
+
+Legacy methods are maintained for backward compatibility:
+
+```php
+claimEmploymentAllowance(bool $on)    // Use setEmploymentAllowance('yes'/'no')
+setDeMinimisStateAidNA(bool $on)      // Use setDeMinimisStateAid('NA')
+setRecoverableAmountsYTD(array $data) // Use setRecoverableAmounts(array $data)
+```
+
+---
 
 ## PAYE RTI NVR (New)
 
