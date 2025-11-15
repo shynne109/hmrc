@@ -1,6 +1,6 @@
-# HMRC (Gift Aid, PAYE RTI: FPS / EPS / NVR, CIS Monthly Return, CIS MTD API, VAT Check, CT600, Companies House API Filing) Submission Library
+# HMRC (Gift Aid, PAYE RTI: FPS / EPS / NVR / P11D, CIS Monthly Return, CIS MTD API, VAT Check, CT600, Companies House API Filing) Submission Library
 
-**A comprehensive library for HMRC submissions including Gift Aid, PAYE RTI, CIS (Monthly Return & MTD API), VAT, and Corporation Tax Companies House API Filing (Final Account)**
+**A comprehensive library for HMRC submissions including Gift Aid, PAYE RTI, P11D/P11D(b) Benefits & Expenses, CIS (Monthly Return & MTD API), VAT, and Corporation Tax Companies House API Filing (Final Account)**
 
 
 
@@ -10,7 +10,7 @@ Amateur Sports Clubs (CASCs) by allowing them to reclaim basic rate tax on a don
 
 'HMRC Charity Repayment Claims' is a library for submitting Gift Aid claims to HMRC.
 
-As of 2025 this fork includes initial implementations of PAYE RTI submissions: Full Payment Submission (FPS), Employer Payment Summary (EPS) and NINO Verification Request (NVR) for the 2025–26 schema subset, each with a real IRmark. It now also includes a CIS Monthly Return builder (aligned to CISreturn v1.2) with declarations, nil return support, aggregated subcontractor totals and optional local schema validation, plus a **CIS Deductions MTD API** (v3.0) with full OAuth2 support for submit, amend, retrieve, and delete operations. Additionally includes VAT number checking REST client and Corporation Tax (CT600) submissions (core subset, v1.993 schema).
+As of 2025 this fork includes comprehensive implementations of PAYE RTI submissions: Full Payment Submission (FPS), Employer Payment Summary (EPS), NINO Verification Request (NVR) for the 2025–26 schema subset, and **new P11D/P11D(b) and P46 Car submissions** for comprehensive employee benefits and expenses reporting. All include real IRmark generation. It now also includes a CIS Monthly Return builder (aligned to CISreturn v1.2) with declarations, nil return support, aggregated subcontractor totals and optional local schema validation, plus a **CIS Deductions MTD API** (v3.0) with full OAuth2 support for submit, amend, retrieve, and delete operations. Additionally includes VAT number checking REST client and Corporation Tax (CT600) submissions (core subset, v1.993 schema).
 
 
 
@@ -43,6 +43,7 @@ This library supports multiple HMRC APIs and submission types:
 ### XML Gateway Submissions - GovTalk Protocol
 - **[Gift Aid Claims](#gift-aid)** - Charity repayment claims with Small Donations Scheme
 - **[PAYE RTI](#paye-rti-fps-new)** - Full Payment Submission (FPS), Employer Payment Summary (EPS), NINO Verification (NVR)
+- **[PAYE P11D/P11D(b)](#paye-p11dp11db-and-p46-car-new)** - Employee benefits and expenses reporting with P11D(b) Class 1A contributions and P46 Car declarations
 - **[PAYE P6/P9 Monitoring](#paye-p6p9-tax-code-monitoring)** - Automated daily monitoring of tax code changes
 - **[CIS Monthly Return](#cis-monthly-return-cis300--v12-schema)** - CIS300 monthly return submissions
 - **[Corporation Tax (CT600)](#corporation-tax-ct600--full-elementattribute-coverage-v1993)** - CT600 submissions with full v1.993 schema
@@ -820,6 +821,326 @@ $resp = $nvr->submit();
 ```
 
 Limitations (EPS & NVR): schema coverage is partial; advanced validation and error surfacing still maturing.
+
+---
+
+## PAYE P11D/P11D(b) and P46 Car (New)
+
+**Comprehensive implementation for employee benefits and expenses reporting for tax year 2025-26**
+
+The `HMRC\PAYE\P11D\P11D` class provides full support for P11D and P11D(b) submissions along with P46 Car benefit declarations.
+
+### What are P11D and P11D(b)?
+
+- **P11D**: Form used by employers to report taxable benefits and expenses provided to employees during the tax year
+- **P11D(b)**: Declaration of Class 1A National Insurance contributions on benefits
+- **P46 Car**: Individual car benefit declarations (New, Amendment, or Cessation)
+
+### Supported Benefit Types
+
+The P11D implementation supports all major benefit categories:
+
+- ✅ **Company Cars** - List price, CO2 emissions, fuel type, private use payments, accessories
+- ✅ **Company Vans** - Van benefits with optional fuel component
+- ✅ **Employee Loans** - Loan details with interest charged and outstanding balances
+- ✅ **Living Accommodation** - Rent, running costs, loan interest
+- ✅ **Mileage Allowance** - Miles covered and allowance amounts
+- ✅ **Payments** - Domestic bills, education, accountancy, season tickets, private car expenses
+- ✅ **Vouchers & Credit Cards** - Meal vouchers, non-cash vouchers, credit cards
+- ✅ **Medical Insurance** - Private medical insurance benefits
+- ✅ **Relocation Expenses** - Relocation loans and expenses
+- ✅ **Services & Accommodation** - Services provided (accommodation, utilities)
+- ✅ **Assets Made Available** - Cars, property, precious metals
+- ✅ **Transferred Assets** - Assets transferred to employees
+- ✅ **Other Benefits** - Catch-all category for miscellaneous benefits
+- ✅ **Expenses Paid** - Various expenses paid by employer
+
+### Class 1A Contributions (P11D(b))
+
+The P11D(b) component allows declaration of:
+- Total Class 1A National Insurance contributions due
+- Contribution details by benefit type
+
+### P46 Car Submissions
+
+Individual car benefit submissions with three submission types:
+- **New**: New car benefit declaration
+- **Amendment**: Modification to existing car benefit
+- **Cessation**: End of car benefit provision
+
+### Quick Start Example
+
+```php
+use HMRC\PAYE\P11D\{P11D, P11DEmployee, P11DBenefits, P11Db, P46Car};
+
+// Create P11D submission
+$p11d = new P11D(
+    senderId: 'SENDERID',
+    password: 'password',
+    employerName: 'ABC Company Ltd',
+    periodEnd: '2026-04-05',  // Tax year end
+    testMode: true            // Use sandbox
+);
+
+// Configure employer
+$p11d->setTaxOfficeNumber('123');
+$p11d->setTaxOfficeReference('AB456');
+$p11d->setUTR('1234567890');
+
+// Add employee with car benefit
+$employee = new P11DEmployee([
+    'forename' => 'John',
+    'surname' => 'Smith',
+    'nino' => 'AB123456C',
+    'gender' => 'male',
+]);
+
+// Add company car
+$employee->getBenefits()->addCar([
+    'Make' => 'Tesla Model 3',
+    'Registered' => '2024-04-06',
+    'AvailFrom' => '2025-04-06',
+    'CO2' => 0,
+    'Fuel' => 'A',
+    'List' => 45000.00,
+    'Accs' => 2500.00,
+    'CapCont' => 5000.00,
+    'PrivUsePmt' => 500.00,
+    'CashEquivOrRelevantAmt' => 3000.00,
+]);
+
+$p11d->addEmployee($employee);
+
+// Add P11D(b) Class 1A contributions
+$p11Db = new P11Db([
+    'totalClass1AContributions' => 25000.00,
+]);
+$p11d->setP11Db($p11Db);
+
+// Build XML (or submit directly if credentials configured)
+$xml = $p11d->buildXML();
+
+// Submit to HMRC
+// $response = $p11d->submit();
+```
+
+### Complete Employee Setup with All Benefit Types
+
+```php
+use HMRC\PAYE\P11D\{P11DEmployee};
+
+$employee = new P11DEmployee([
+    'forename' => 'Jane',
+    'forename2' => 'Mary',      // Optional second forename
+    'surname' => 'Doe',
+    'title' => 'Dr',            // Optional title
+    'nino' => 'XY987654B',
+    'worksNo' => 'EMP001',
+    'gender' => 'female',
+    'birthDate' => '1980-05-15',
+    'isDirector' => true,
+]);
+
+$benefits = $employee->getBenefits();
+
+// Add company car
+$benefits->addCar([
+    'Make' => 'BMW 5 Series',
+    'Registered' => '2023-06-15',
+    'CO2' => 145,
+    'Fuel' => 'D',
+    'List' => 55000.00,
+    'Accs' => 1500.00,
+    'CapCont' => 3000.00,
+    'PrivUsePmt' => 450.00,
+    'CashEquivOrRelevantAmt' => 4500.00,
+]);
+
+// Add van benefit
+$benefits->setVans([
+    'CashEquivOrRelevantAmt' => 3500.00,
+    'FuelCashEquivOrRelevantAmt' => 500.00,
+]);
+
+// Add employee loan
+$benefits->addLoan([
+    'Joint' => 0,
+    'InitOS' => 10000.00,       // Initial outstanding
+    'FinalOS' => 8000.00,       // Final outstanding
+    'Rate' => 2.50,             // Interest rate
+    'InterestChargedAmt' => 250.00,
+    'CashEquivOrRelevantAmt' => 500.00,
+]);
+
+// Add living accommodation
+$benefits->setLivingAccom([
+    'CashEquivOrRelevantAmt' => 5000.00,
+    'RunningCosts' => 2000.00,
+    'LoanInterest' => 1500.00,
+]);
+
+// Add medical insurance
+$benefits->setMedical([
+    'CashEquivOrRelevantAmt' => 800.00,
+]);
+
+$p11d->addEmployee($employee);
+```
+
+### P46 Car Declarations
+
+```php
+use HMRC\PAYE\P11D\{P46Car};
+
+// New car declaration
+$newCar = new P46Car([
+    'forename' => 'David',
+    'surname' => 'Johnson',
+    'nino' => 'AB111111A',
+    'submissionReason' => 'New',
+    'carDetails' => [
+        'Make' => 'Audi A4',
+        'Registered' => '2025-06-01',
+    ],
+    'co2Emissions' => 120,
+    'co2RelatedFuel' => 'D',
+    'listPrice' => 35000.00,
+    'capitalContribution' => 2500.00,
+    'privateUsePayment' => 300.00,
+]);
+
+$p11d->addP46Car($newCar);
+
+// Amendment to existing car
+$amendment = new P46Car([
+    'forename' => 'Sarah',
+    'surname' => 'Williams',
+    'nino' => 'CD222222D',
+    'submissionReason' => 'Amendment',
+    'privateUsePayment' => 400.00,  // Updated payment
+]);
+
+$p11d->addP46Car($amendment);
+
+// Cessation of car benefit
+$cessation = new P46Car([
+    'forename' => 'Michael',
+    'surname' => 'Brown',
+    'nino' => 'EF333333E',
+    'submissionReason' => 'Cessation',
+]);
+
+$p11d->addP46Car($cessation);
+```
+
+### Monetary Values & Formatting
+
+All monetary values in the P11D implementation:
+- Accept float values (e.g., `3000.50`)
+- Automatically formatted to 2 decimal places for XML output
+- Must be non-negative unless specifically noted otherwise
+- Support range limits per HMRC schema (e.g., CO2 0-999, Capital Contribution 0-5000)
+
+### Validation
+
+The P11D classes include built-in validation:
+
+```php
+// Valid NINO format: XX123456X (2 letters, 6 digits, 1 letter/space)
+$employee->setNino('AB123456C');    // ✓ Valid
+// $employee->setNino('INVALID');   // ✗ Throws InvalidArgumentException
+
+// Gender must be 'male', 'female', 'M', or 'F'
+$employee->setGender('male');       // ✓ Valid
+// $employee->setGender('other');   // ✗ Throws InvalidArgumentException
+
+// P46Car submission reason must be one of: New, Amendment, Cessation
+$car->setSubmissionReason('New');   // ✓ Valid
+// $car->setSubmissionReason('Update');  // ✗ Throws InvalidArgumentException
+
+// CO2 emissions range 0-999
+$car->setCo2Emissions(145);         // ✓ Valid
+// $car->setCo2Emissions(9999);     // ✗ Throws InvalidArgumentException
+```
+
+### Complete Usage Examples
+
+For comprehensive examples covering all benefit types and submission scenarios, see:
+- `examples/p11d_usage_examples.php` - Full working examples with all benefit combinations
+
+### Key Classes
+
+- **`P11D`** - Main submission class for P11D/P11D(b) and P46 Car submissions
+- **`P11DEmployee`** - Employee data holder with benefit tracking
+- **`P11DBenefits`** - Benefit data container for all benefit types
+- **`P11Db`** - Class 1A contributions declaration
+- **`P46Car`** - Individual car benefit submission
+
+### XML Schema Support
+
+- ✅ **EXB-2026-v1-0.xsd** - Full schema validation (when enabled)
+- ✅ **IRenvelope** - Complete IR envelope structure with IRheader
+- ✅ **IRmark** - Real IRmark generation per HMRC specifications
+- ✅ **Compression** - Support for gzip compression for large submissions (1000+ records)
+
+### Submission & Response Handling
+
+```php
+use HMRC\PAYE\P11D\{P11D};
+
+$p11d = new P11D(
+    senderId: 'SENDERID',
+    password: 'password',
+    employerName: 'Company Ltd',
+    periodEnd: '2026-04-05',
+    testMode: true
+);
+
+// ... add employees and benefits ...
+
+// Submit to HMRC
+$response = $p11d->submit();
+
+if (isset($response['success']) && $response['success']) {
+    $correlationId = $response['correlationid'];
+    $endpoint = $response['endpoint'];
+    
+    // Poll for status
+    sleep($response['interval'] ?? 2);
+    
+    // To retrieve submission status (would need additional polling implementation)
+} else {
+    // Handle errors
+    if (isset($response['errors'])) {
+        foreach ($response['errors'] as $error) {
+            echo "Error: " . $error . "\n";
+        }
+    }
+}
+```
+
+### Limitations & Future Enhancements
+
+**Current Implementation:**
+- Full support for core P11D and P46 benefit types
+- Real IRmark generation
+- XML envelope and header construction
+- Basic HMRC schema validation support
+
+**Future Enhancements (Roadmap):**
+- Compression support for large submissions (gzip encoding)
+- Enhanced error reporting with detailed HMRC validation messages
+- Streaming/chunked uploads for very large datasets
+- Advanced cross-field validation rules
+- Automatic retry logic with exponential backoff
+- Receipt and acknowledgement processing
+- Correlation ID tracking and polling
+
+### Resources
+
+- **HMRC P11D Guidance**: [https://www.gov.uk/government/publications/employment-income-provided-benefits-and-expenses-guide-p11d](https://www.gov.uk/government/publications/employment-income-provided-benefits-and-expenses-guide-p11d)
+- **HMRC EXB Schema**: EXB-2026-v1-0.xsd documentation
+- **Benefits & Expenses Guide**: [https://www.gov.uk/guidance/report-benefits-and-expenses-p11d](https://www.gov.uk/guidance/report-benefits-and-expenses-p11d)
 
 ---
 

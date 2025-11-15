@@ -43,6 +43,8 @@ class FPS extends GovTalk
     private string $vendorId = '';
     private string $productName = '';
     private string $productVersion = '';
+    private string $senderType = 'Employer';
+
 
     private const MESSAGE_CLASS = 'HMRC-PAYE-RTI-FPS';
 
@@ -86,6 +88,11 @@ class FPS extends GovTalk
     public function setRelatedTaxYear(string $yyDashYy): void
     {
         $this->relatedTaxYear = $yyDashYy; // format '25-26'
+    }
+
+    public function setSenderType(string $type): void
+    {
+        $this->senderType = $type; // e.g. 'Agent' or 'Employer'
     }
 
     public function addEmployee(Employee $employee): void
@@ -134,13 +141,18 @@ class FPS extends GovTalk
         // IRheader
         $xw->startElement('IRheader');
         $xw->startElement('Keys');
-        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeNumber'); $xw->text($this->employer->getTaxOfficeNumber()); $xw->endElement();
-        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeReference'); $xw->text($this->employer->getTaxOfficeReference()); $xw->endElement();
+        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeNumber'); 
+        $xw->text($this->employer->getTaxOfficeNumber()); 
+        $xw->endElement();
+        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeReference'); 
+        $xw->text($this->employer->getTaxOfficeReference()); 
+        $xw->endElement();
         $xw->endElement(); // Keys
         $xw->writeElement('PeriodEnd', date('Y-m-d'));
         $xw->writeElement('DefaultCurrency', 'GBP');
-        $xw->startElement('IRmark'); $xw->writeAttribute('Type','generic'); $xw->text('IRmark+Token'); $xw->endElement();
-        $xw->writeElement('Sender', 'Employer');
+        $xw->startElement('IRmark'); $xw->writeAttribute('Type','generic'); 
+        $xw->text('IRmark+Token'); $xw->endElement();
+        $xw->writeElement('Sender', $this->senderType);
         $xw->endElement(); // IRheader
 
         // FullPaymentSubmission
@@ -149,8 +161,12 @@ class FPS extends GovTalk
         $xw->startElement('EmpRefs');
         $xw->writeElement('OfficeNo', $this->employer->getTaxOfficeNumber());
         $xw->writeElement('PayeRef', $this->employer->getTaxOfficeReference());
-        if ($this->employer->getAccountsOfficeReference()) { $xw->writeElement('AORef', $this->employer->getAccountsOfficeReference()); }
-        if ($this->employer->getCorporationTaxReference()) { $xw->writeElement('COTAXRef', $this->employer->getCorporationTaxReference()); }
+        if ($this->employer->getAccountsOfficeReference()) { 
+            $xw->writeElement('AORef', $this->employer->getAccountsOfficeReference()); 
+        }
+        if ($this->employer->getCorporationTaxReference()) { 
+            $xw->writeElement('COTAXRef', $this->employer->getCorporationTaxReference()); 
+        }
         $xw->endElement(); // EmpRefs
 
         $xw->writeElement('RelatedTaxYear', $this->relatedTaxYear);

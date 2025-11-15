@@ -5,6 +5,7 @@ namespace HMRC\PAYE;
 class ReportingCompany
 {
     protected $details = [];   
+    private $name = '';
     private $tax_office_number = '';
 	private $tax_office_reference = '';
 	private $accounts_office_reference = '';
@@ -18,7 +19,8 @@ class ReportingCompany
         ?string $taxOfficeNumber = null,
         ?string $taxOfficeReference = null,
         ?string $accountsOfficeReference = null,
-        ?string $corporationTaxReference = null
+        ?string $corporationTaxReference = null,
+        ?string $name = null
     ) {
         $this->tax_office_number = $taxOfficeNumber;
         $this->tax_office_reference = $taxOfficeReference;
@@ -31,6 +33,7 @@ class ReportingCompany
             );
         }
         $this->corporation_tax_reference = $corporationTaxReference;
+        $this->name = $name ?? '';
     }
 
     public function getTaxOfficeNumber(): ?string
@@ -53,6 +56,16 @@ class ReportingCompany
         return $this->corporation_tax_reference;
     }
 
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    public function setName(string $value): void
+    {
+        $this->name = $value;
+    }
+
     public function setTaxOfficeNumber(string $value): void
     {
         $this->tax_office_number = $value;
@@ -67,6 +80,8 @@ class ReportingCompany
     {
         $this->accounts_office_reference = $value;
     }
+
+
 
     /**
      * Set Corporation Tax Reference (UTR)
@@ -83,6 +98,8 @@ class ReportingCompany
         }
         $this->corporation_tax_reference = $value;
     }
+    
+
 
     public function details_set($details) {
         $this->details = array_merge(array(

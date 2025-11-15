@@ -54,6 +54,7 @@ class FPSLocalServerTest extends TestCase
         $url = 'http://localhost:5665/LTS/LTSPostServlet';
 
         $fps = new FPS('SENDERID', 'password', $this->buildEmployer(), true, $url);
+        $fps->setSoftwareMeta('8174', 'Abbpay Solutions', '1.0.0');
         // include GatewayTimestamp as LTS expects it for test mode
         $fps->setTimestamp(new \DateTime('now', new \DateTimeZone('UTC')));
 

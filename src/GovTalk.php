@@ -1485,8 +1485,8 @@ class GovTalk implements LoggerAwareInterface
                 // This URI format is not valid for HMRC submissions, but `autoAppendOwnChannelRouting`
                 // should be switched off for those anyway – so sticking with it for now in case it's helpful
                 // for other govt departments.
-                'uri' => 'https://abbpaysolutions.com/',
-                'product' => 'abbpay-solutions',
+                'uri' => '1234',
+                'product' => 'php-govtalk',
                 'version' => self::VERSION,
                 'timestamp' => date('c')
             ];
