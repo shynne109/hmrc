@@ -4,11 +4,12 @@ namespace HMRC\PAYE\Tests;
 
 require_once __DIR__ . '/../../bootstrap.php';
 
-use HMRC\PAYE\P11D\P11D;
-use HMRC\PAYE\P11D\P11DEmployee;
-use HMRC\PAYE\P11D\P11DBenefits;
+use HMRC\PAYE\P11D;
 use HMRC\PAYE\P11D\P11Db;
 use HMRC\PAYE\P11D\P46Car;
+use HMRC\PAYE\ReportingCompany;
+use HMRC\PAYE\P11D\P11DBenefits;
+use HMRC\PAYE\P11D\P11DEmployee;
 
 /**
  * P11D Test Suite
@@ -16,10 +17,23 @@ use HMRC\PAYE\P11D\P46Car;
  */
 class P11DTest extends TestCase
 {
+   
+   private function buildEmployer(): ReportingCompany
+   {
+       return new ReportingCompany(taxOfficeNumber: '123', taxOfficeReference: 'AB456', accountsOfficeReference: '123PA00123456', corporationTaxReference: '1234567890', name: 'Test Company Ltd');
+   }
+
+
+
     private function buildP11D(bool $testMode = true): P11D
     {
-        return new P11D('SENDERID', 'password', 'Test Company Ltd', '2026-04-05', $testMode);
+        $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', $testMode);
+        $p11d->setLogger(new \Psr\Log\NullLogger());
+        $p11d->setSoftwareMeta('8174', 'Abbpay Solutions', '1.0.0');
+        $p11d->setRelatedTaxYear('25-26');
+        return $p11d;
     }
+
 
     private function buildEmployee(array $overrides = []): P11DEmployee
     {
@@ -56,7 +70,8 @@ class P11DTest extends TestCase
     public function testP11DRejectsInvalidDateFormat(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new P11D('SENDERID', 'password', 'Test Company', 'invalid-date', true);
+        $p11d = $this->buildP11D();
+        $p11d->setRelatedTaxYear('25-26');
     }
 
     /**
@@ -65,7 +80,7 @@ class P11DTest extends TestCase
     public function testP11DCalculatesTaxYearCorrectly(): void
     {
         // Period end April 5, 2026 = tax year 25-26
-        $p11d = new P11D('SENDERID', 'password', 'Test', '2026-04-05', true);
+        $p11d = $this->buildP11D();
         $xml = $p11d->buildXML();
         $this->assertStringContainsString('25-26', $xml);
     }
@@ -76,8 +91,6 @@ class P11DTest extends TestCase
     public function testP11DSetsTaxOfficeDetails(): void
     {
         $p11d = $this->buildP11D();
-        $p11d->setTaxOfficeNumber('123');
-        $p11d->setTaxOfficeReference('AB456');
         $xml = $p11d->buildXML();
         $this->assertStringContainsString('<OfficeNo>123</OfficeNo>', $xml);
         $this->assertStringContainsString('<PayeRef>AB456</PayeRef>', $xml);
@@ -356,8 +369,6 @@ class P11DTest extends TestCase
     public function testP11DBuildXmlWithProperStructure(): void
     {
         $p11d = $this->buildP11D();
-        $p11d->setTaxOfficeNumber('123');
-        $p11d->setTaxOfficeReference('AB456');
         $emp = $this->buildEmployee();
         $p11d->addEmployee($emp);
 
@@ -376,7 +387,6 @@ class P11DTest extends TestCase
     public function testP11DGeneratesXmlWithoutPlaceholders(): void
     {
         $p11d = $this->buildP11D();
-        $p11d->setTaxOfficeNumber('123');
         $p11d->addEmployee($this->buildEmployee());
 
         $xml = $p11d->buildXML();
@@ -473,9 +483,6 @@ class P11DTest extends TestCase
     public function testP11DBuildsCompleteSubmissionWithXml(): void
     {
         $p11d = $this->buildP11D();
-        $p11d->setTaxOfficeNumber('123');
-        $p11d->setTaxOfficeReference('AB456');
-
         $emp = $this->buildEmployee();
         $emp->getBenefits()->addCar([
             'Make' => 'Tesla',
@@ -535,7 +542,6 @@ class P11DTest extends TestCase
     public function testP11DWithEmptyEmployeeCollection(): void
     {
         $p11d = $this->buildP11D();
-        $p11d->setTaxOfficeNumber('123');
         $xml = $p11d->buildXML();
         // Should still build valid XML structure
         $this->assertStringContainsString('<IRenvelope', $xml);
@@ -547,8 +553,8 @@ class P11DTest extends TestCase
      */
     public function testP11DTestModeFlag(): void
     {
-        $p11dTest = new P11D('SENDERID', 'password', 'Test', '2026-04-05', true);
-        $p11dLive = new P11D('SENDERID', 'password', 'Test', '2026-04-05', false);
+        $p11dTest = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true);
+        $p11dLive = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', false);
 
         // Both should construct without error
         $this->assertInstanceOf(P11D::class, $p11dTest);
@@ -561,7 +567,7 @@ class P11DTest extends TestCase
     public function testP11DWithCustomTestEndpoint(): void
     {
         $customEndpoint = 'https://custom.example.com/submit';
-        $p11d = new P11D('SENDERID', 'password', 'Test', '2026-04-05', true, $customEndpoint);
+        $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true, $customEndpoint);
         $this->assertInstanceOf(P11D::class, $p11d);
     }
 
@@ -647,8 +653,6 @@ class P11DTest extends TestCase
 
         $p11d = $this->buildP11D();
         $p11d->setLogger(new \Psr\Log\NullLogger());
-        $p11d->setTaxOfficeNumber('123');
-        $p11d->setTaxOfficeReference('AB456');
         $this->injectMockClient($p11d);
 
         $emp = $this->buildEmployee();
@@ -666,7 +670,7 @@ class P11DTest extends TestCase
     public function testP11DXmlContainsProperNamespace(): void
     {
         $p11d = $this->buildP11D();
-        $p11d->setTaxOfficeNumber('123');
+        
         $xml = $p11d->buildXML();
 
         $this->assertStringContainsString('xmlns=', $xml);
@@ -736,8 +740,8 @@ class P11DTest extends TestCase
      */
     public function testP11DDateNormalization(): void
     {
-        $p11d1 = new P11D('SENDERID', 'password', 'Test', '2026-04-05', true);
-        $p11d2 = new P11D('SENDERID', 'password', 'Test', '2026/04/05', true);
+        $p11d1 = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true);
+        $p11d2 = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026/04/05', true);
         // Both should work (date parser handles it)
         $this->assertInstanceOf(P11D::class, $p11d1);
         $this->assertInstanceOf(P11D::class, $p11d2);

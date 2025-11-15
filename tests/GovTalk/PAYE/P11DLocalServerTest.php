@@ -90,11 +90,11 @@ class P11DLocalServerTest extends TestCase
      */
     public function testP11DWithMultipleEmployeesAndBenefits(): void
     {
-        if (!$this->isHostReachable('localhost', 5665)) {
-            $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
-        }
+        // if (!$this->isHostReachable('localhost', 5665)) {
+        //     $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
+        // }
 
-        $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true, self::LTS_URL);
+        $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true);
         $p11d->setLogger(new \Psr\Log\NullLogger());
         $p11d->setSoftwareMeta('8174', 'Abbpay Solutions', '1.0.0');
         $p11d->setRelatedTaxYear('25-26');
