@@ -9,6 +9,8 @@ class SenderDetails
     private $password   = '';
     private $email      = '';
 
+    private $agentDetails = null;
+
     public function __construct($senderId, $password, $email = null)
     {
         $this->senderId = $senderId;
@@ -45,4 +47,15 @@ class SenderDetails
     {
         $this->email = $value;
     }
+
+    public function getAgentDetails()
+    {
+        return $this->agentDetails;
+    }
+    public function setAgentDetails(AgentDetails $agentDetails)
+    {
+        $this->agentDetails = $agentDetails;
+    }
+
+
 }

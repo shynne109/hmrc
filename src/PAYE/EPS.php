@@ -99,6 +99,8 @@ class EPS extends GovTalk
 
     private LoggerInterface $logger;
 
+    private ?AgentDetails $agentDetails = null;
+
     private const MESSAGE_CLASS = 'HMRC-PAYE-RTI-EPS';
 
     public function __construct(
@@ -141,6 +143,17 @@ class EPS extends GovTalk
     public function setRelatedTaxYear(string $yyDashYy): void
     {
         $this->relatedTaxYear = $yyDashYy; // format '25-26'
+    }
+
+    public function setAgentDetails(AgentDetails $agentDetails): self
+    {
+        $this->agentDetails = $agentDetails;
+        return $this;
+    }
+
+    public function getAgentDetails(): ?AgentDetails
+    {
+        return $this->agentDetails;
     }
 
     public function setPeriodEnd(string $date): void
@@ -361,6 +374,83 @@ class EPS extends GovTalk
      * 
      * @throws \RuntimeException if business rules are violated
      */
+    private function writeAgent(XMLWriter $xw, AgentDetails $agent): void
+    {
+        $xw->startElement('Agent');
+
+        // Agent ID
+        if ($agent->getAgentId() !== null) {
+            $xw->writeElement('AgentID', $agent->getAgentId());
+        }
+
+        // Company name
+        if ($agent->getCompany() !== null) {
+            $xw->writeElement('Company', $agent->getCompany());
+        }
+
+        // Address
+        if ($agent->getAddress() !== null) {
+            $address = $agent->getAddress();
+            $xw->startElement('Address');
+
+            // Address lines
+            if (isset($address['Line'])) {
+                $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
+                foreach ($lines as $line) {
+                    if (!empty($line)) {
+                        $xw->writeElement('Line', $line);
+                    }
+                }
+            }
+
+            // Post Code
+            if (isset($address['PostCode']) && !empty($address['PostCode'])) {
+                $xw->writeElement('PostCode', $address['PostCode']);
+            }
+
+            // Country
+            if (isset($address['Country']) && !empty($address['Country'])) {
+                $xw->writeElement('Country', $address['Country']);
+            }
+
+            $xw->endElement(); // Address
+        }
+
+        // Contact details
+        $emails = $agent->getEmails();
+        $telephones = $agent->getTelephones();
+
+        if (!empty($emails) || !empty($telephones)) {
+            $xw->startElement('Contact');
+
+            // Emails
+            foreach ($emails as $email) {
+                if (!empty(trim($email))) {
+                    $xw->writeElement('Email', trim($email));
+                }
+            }
+
+            // Telephones
+            foreach ($telephones as $telephone) {
+                if (is_array($telephone) && isset($telephone['Number'])) {
+                    if (!empty(trim($telephone['Number']))) {
+                        $xw->startElement('Telephone');
+                        $xw->writeElement('Number', trim($telephone['Number']));
+                        $xw->endElement(); // Telephone
+                    }
+                }
+            }
+
+            $xw->endElement(); // Contact
+        }
+
+        $xw->endElement(); // Agent
+    }
+
+    /**
+     * Validate business rules
+     * @throws \RuntimeException if business rules are violated
+     */
     private function validateBusinessRules(): void
     {
         // Rule 7953: If CISDeductionsSuffered > 0, COTAXRef must be present
@@ -393,6 +483,12 @@ class EPS extends GovTalk
         $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeReference'); $xw->text($this->employer->getTaxOfficeReference()); $xw->endElement();
         $xw->endElement(); // Keys
         $xw->writeElement('PeriodEnd', $this->periodEnd ?: date('Y-m-d'));
+
+        // Agent information
+        if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
+            $this->writeAgent($xw, $this->agentDetails);
+        }
+
         $xw->writeElement('DefaultCurrency', 'GBP');
         $xw->startElement('IRmark'); $xw->writeAttribute('Type','generic'); $xw->text('IRmark+Token'); $xw->endElement();
         $xw->writeElement('Sender', 'Employer');

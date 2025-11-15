@@ -33,6 +33,18 @@ class P11D extends GovTalk
     private string $productVersion = '';
     private string $senderType = 'Employer';
 
+    private ?AgentDetails $agentDetails = null;
+
+    public function setAgentDetails(AgentDetails $agentDetails): self
+    {
+        $this->agentDetails = $agentDetails;
+        return $this;
+    }
+
+    public function getAgentDetails(): ?AgentDetails
+    {
+        return $this->agentDetails;
+    }
 
     private ?string $UTR = null;
 
@@ -235,12 +247,18 @@ class P11D extends GovTalk
 
         // IRheader
         $xml->startElement('IRheader');
+
+        $xml->startElement('TestMessage');
+        $xml->text(1);
+        $xml->endElement();
+
         $xml->startElement('Keys');
         $xml->startElement('Key'); 
         $xml->writeAttribute('Type','TaxOfficeNumber'); 
         $xml->text($this->employer->getTaxOfficeNumber()); 
         $xml->endElement();
-        $xml->startElement('Key'); $xml->writeAttribute('Type','TaxOfficeReference'); 
+        $xml->startElement('Key'); 
+        $xml->writeAttribute('Type','TaxOfficeReference'); 
         $xml->text($this->employer->getTaxOfficeReference()); 
         $xml->endElement();
         if ($this->UTR) {
@@ -251,14 +269,20 @@ class P11D extends GovTalk
         }
         $xml->endElement(); // Keys
         $xml->writeElement('PeriodEnd', $this->periodEnd);
+
+        // Agent information
+        if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
+            $this->writeAgent($xml, $this->agentDetails);
+        }
+
         $xml->writeElement('DefaultCurrency', 'GBP');
-        $xml->startElement('IRmark'); $xml->writeAttribute('Type','SAonly'); 
-        $xml->text('IRmark+Token'); $xml->endElement();
+        $xml->startElement('IRmark'); 
+        $xml->writeAttribute('Type','generic'); 
+        $xml->text('IRmark+Token'); 
+        $xml->endElement();
         $xml->writeElement('Sender', $this->senderType);
         $xml->endElement(); // IRheader
        
-        
-
         // Build ExpensesAndBenefits
         $this->buildExpensesAndBenefits($xml);
 
@@ -314,6 +338,79 @@ class P11D extends GovTalk
         }
 
         $xml->endElement(); // ExpensesAndBenefits
+    }
+
+    private function writeAgent(XMLWriter $xml, AgentDetails $agent): void
+    {
+        $xml->startElement('Agent');
+
+        // Agent ID
+        if ($agent->getAgentId() !== null) {
+            $xml->writeElement('AgentID', $agent->getAgentId());
+        }
+
+        // Company name
+        if ($agent->getCompany() !== null) {
+            $xml->writeElement('Company', $agent->getCompany());
+        }
+
+        // Address
+        if ($agent->getAddress() !== null) {
+            $address = $agent->getAddress();
+            $xml->startElement('Address');
+
+            // Address lines
+            if (isset($address['Line'])) {
+                $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
+                foreach ($lines as $line) {
+                    if (!empty($line)) {
+                        $xml->writeElement('Line', $line);
+                    }
+                }
+            }
+
+            // Post Code
+            if (isset($address['PostCode']) && !empty($address['PostCode'])) {
+                $xml->writeElement('PostCode', $address['PostCode']);
+            }
+
+            // Country
+            if (isset($address['Country']) && !empty($address['Country'])) {
+                $xml->writeElement('Country', $address['Country']);
+            }
+
+            $xml->endElement(); // Address
+        }
+
+        // Contact details
+        $emails = $agent->getEmails();
+        $telephones = $agent->getTelephones();
+
+        if (!empty($emails) || !empty($telephones)) {
+            $xml->startElement('Contact');
+
+            // Emails
+            foreach ($emails as $email) {
+                if (!empty(trim($email))) {
+                    $xml->writeElement('Email', trim($email));
+                }
+            }
+
+            // Telephones
+            foreach ($telephones as $telephone) {
+                if (is_array($telephone) && isset($telephone['Number'])) {
+                    if (!empty(trim($telephone['Number']))) {
+                        $xml->startElement('Telephone');
+                        $xml->writeElement('Number', trim($telephone['Number']));
+                        $xml->endElement(); // Telephone
+                    }
+                }
+            }
+
+            $xml->endElement(); // Contact
+        }
+
+        $xml->endElement(); // Agent
     }
 
     private function writeP11Db(XMLWriter $xml, P11Db $p11Db): void

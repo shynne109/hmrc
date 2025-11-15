@@ -35,7 +35,7 @@ class P11DLocalServerTest extends TestCase
 
     private function buildEmployer(): ReportingCompany
     {
-        return new ReportingCompany(taxOfficeNumber: '635', taxOfficeReference: 'A635', accountsOfficeReference: '123PA00123456', corporationTaxReference: '1234567890', name: 'Test Company Ltd');
+        return new ReportingCompany(taxOfficeNumber: '635', taxOfficeReference: 'A635', accountsOfficeReference: '120PR03012191', corporationTaxReference: '9255858485', name: 'Test Company Ltd');
     }
 
     /**
