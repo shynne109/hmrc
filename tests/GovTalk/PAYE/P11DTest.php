@@ -27,9 +27,9 @@ class P11DTest extends TestCase
 
     private function buildP11D(bool $testMode = true): P11D
     {
-        $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', $testMode);
+        $p11d = new P11D('ISV635', 'fGuR34fAOEJf', $this->buildEmployer(), '2026-04-05', $testMode);
         $p11d->setLogger(new \Psr\Log\NullLogger());
-        $p11d->setSoftwareMeta('8174', 'Abbpay Solutions', '1.0.0');
+        $p11d->setSoftwareMeta('9256', 'Abbpay Solutions', '1.0.0');
         $p11d->setRelatedTaxYear('25-26');
         return $p11d;
     }
@@ -553,8 +553,8 @@ class P11DTest extends TestCase
      */
     public function testP11DTestModeFlag(): void
     {
-        $p11dTest = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true);
-        $p11dLive = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', false);
+        $p11dTest = new P11D('ISV635', 'fGuR34fAOEJf', $this->buildEmployer(), '2026-04-05', true);
+        $p11dLive = new P11D('ISV635', 'fGuR34fAOEJf', $this->buildEmployer(), '2026-04-05', false);
 
         // Both should construct without error
         $this->assertInstanceOf(P11D::class, $p11dTest);
@@ -567,7 +567,7 @@ class P11DTest extends TestCase
     public function testP11DWithCustomTestEndpoint(): void
     {
         $customEndpoint = 'https://custom.example.com/submit';
-        $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true, $customEndpoint);
+        $p11d = new P11D('ISV635', 'fGuR34fAOEJf', $this->buildEmployer(), '2026-04-05', true, $customEndpoint);
         $this->assertInstanceOf(P11D::class, $p11d);
     }
 
@@ -740,8 +740,8 @@ class P11DTest extends TestCase
      */
     public function testP11DDateNormalization(): void
     {
-        $p11d1 = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true);
-        $p11d2 = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026/04/05', true);
+        $p11d1 = new P11D('ISV635', 'fGuR34fAOEJf', $this->buildEmployer(), '2026-04-05', true);
+        $p11d2 = new P11D('ISV635', 'fGuR34fAOEJf', $this->buildEmployer(), '2026/04/05', true);
         // Both should work (date parser handles it)
         $this->assertInstanceOf(P11D::class, $p11d1);
         $this->assertInstanceOf(P11D::class, $p11d2);

@@ -35,7 +35,7 @@ class P11DLocalServerTest extends TestCase
 
     private function buildEmployer(): ReportingCompany
     {
-        return new ReportingCompany(taxOfficeNumber: '123', taxOfficeReference: 'AB456', accountsOfficeReference: '123PA00123456', corporationTaxReference: '1234567890', name: 'Test Company Ltd');
+        return new ReportingCompany(taxOfficeNumber: '635', taxOfficeReference: 'A635', accountsOfficeReference: '123PA00123456', corporationTaxReference: '1234567890', name: 'Test Company Ltd');
     }
 
     /**
@@ -47,7 +47,7 @@ class P11DLocalServerTest extends TestCase
     //         $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
     //     }
 
-    //     $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true, self::LTS_URL);
+    //     $p11d = new P11D('ISV635', 'password', $this->buildEmployer(), '2026-04-05', true, self::LTS_URL);
     //     $p11d->setLogger(new \Psr\Log\NullLogger());
     //     $p11d->setSoftwareMeta('8174', 'Abbpay Solutions', '1.0.0');
 
@@ -94,9 +94,9 @@ class P11DLocalServerTest extends TestCase
         //     $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
         // }
 
-        $p11d = new P11D('SENDERID', 'password', $this->buildEmployer(), '2026-04-05', true);
+        $p11d = new P11D('ISV635', 'fGuR34fAOEJf', $this->buildEmployer(), '2026-04-05', true);
         $p11d->setLogger(new \Psr\Log\NullLogger());
-        $p11d->setSoftwareMeta('8174', 'Abbpay Solutions', '1.0.0');
+        $p11d->setSoftwareMeta('9256', 'Abbpay Solutions', '1.0.0');
         $p11d->setRelatedTaxYear('25-26');
 
         // Employee 1: Car benefit
@@ -192,7 +192,7 @@ class P11DLocalServerTest extends TestCase
     //         $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
     //     }
 
-    //     $p11d = new P11D('SENDERID', 'password', 'P46 Test Company', '2026-04-05', true, self::LTS_URL);
+    //     $p11d = new P11D('ISV635', 'password', 'P46 Test Company', '2026-04-05', true, self::LTS_URL);
     //     $p11d->setTaxOfficeNumber('123');
     //     $p11d->setTaxOfficeReference('AB456');
     //     $p11d->setLogger(new \Psr\Log\NullLogger());
@@ -288,7 +288,7 @@ class P11DLocalServerTest extends TestCase
     //         $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
     //     }
 
-    //     $p11d = new P11D('SENDERID', 'password', 'Class 1A Company', '2026-04-05', true, self::LTS_URL);
+    //     $p11d = new P11D('ISV635', 'password', 'Class 1A Company', '2026-04-05', true, self::LTS_URL);
     //     $p11d->setTaxOfficeNumber('123');
     //     $p11d->setTaxOfficeReference('AB456');
     //     $p11d->setLogger(new \Psr\Log\NullLogger());
@@ -366,7 +366,7 @@ class P11DLocalServerTest extends TestCase
     //         $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
     //     }
 
-    //     $p11d = new P11D('SENDERID', 'password', 'Complete Benefits Company', '2026-04-05', true, self::LTS_URL);
+    //     $p11d = new P11D('ISV635', 'password', 'Complete Benefits Company', '2026-04-05', true, self::LTS_URL);
     //     $p11d->setTaxOfficeNumber('123');
     //     $p11d->setTaxOfficeReference('AB456');
     //     $p11d->setLogger(new \Psr\Log\NullLogger());
@@ -466,7 +466,7 @@ class P11DLocalServerTest extends TestCase
     //         $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
     //     }
 
-    //     $p11d = new P11D('SENDERID', 'password', 'Complex Data Company', '2026-04-05', true, self::LTS_URL);
+    //     $p11d = new P11D('ISV635', 'password', 'Complex Data Company', '2026-04-05', true, self::LTS_URL);
     //     $p11d->setTaxOfficeNumber('123');
     //     $p11d->setTaxOfficeReference('AB456');
     //     $p11d->setLogger(new \Psr\Log\NullLogger());
@@ -535,7 +535,7 @@ class P11DLocalServerTest extends TestCase
     //         $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
     //     }
 
-    //     $p11d = new P11D('SENDERID', 'password', 'XML Test Company', '2026-04-05', true, self::LTS_URL);
+    //     $p11d = new P11D('ISV635', 'password', 'XML Test Company', '2026-04-05', true, self::LTS_URL);
     //     $p11d->setTaxOfficeNumber('123');
     //     $p11d->setTaxOfficeReference('AB456');
     //     $p11d->setLogger(new \Psr\Log\NullLogger());
@@ -599,7 +599,7 @@ class P11DLocalServerTest extends TestCase
     //         $this->markTestSkipped('HMRC LTS server not reachable at localhost:5665');
     //     }
 
-    //     $p11d = new P11D('SENDERID', 'password', 'Minimal Data Company', '2026-04-05', true, self::LTS_URL);
+    //     $p11d = new P11D('ISV635', 'password', 'Minimal Data Company', '2026-04-05', true, self::LTS_URL);
     //     $p11d->setTaxOfficeNumber('123');
     //     $p11d->setTaxOfficeReference('AB456');
     //     $p11d->setLogger(new \Psr\Log\NullLogger());
