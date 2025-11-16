@@ -247,9 +247,8 @@ class P11D extends GovTalk
 
         // IRheader
         $xml->startElement('IRheader');
-
         $xml->startElement('TestMessage');
-        $xml->text(1);
+        $xml->text(7);
         $xml->endElement();
 
         $xml->startElement('Keys');
@@ -261,10 +260,10 @@ class P11D extends GovTalk
         $xml->writeAttribute('Type','TaxOfficeReference'); 
         $xml->text($this->employer->getTaxOfficeReference()); 
         $xml->endElement();
-        if ($this->UTR) {
+        if ($this->employer->getCorporationTaxReference()) {
             $xml->startElement('Key');
             $xml->writeAttribute('Type', 'UTR');
-            $xml->text($this->UTR);
+            $xml->text($this->employer->getCorporationTaxReference());
             $xml->endElement();
         }
         $xml->endElement(); // Keys

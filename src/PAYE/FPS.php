@@ -153,10 +153,12 @@ class FPS extends GovTalk
         // IRheader
         $xw->startElement('IRheader');
         $xw->startElement('Keys');
-        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeNumber'); 
+        $xw->startElement('Key'); 
+        $xw->writeAttribute('Type','TaxOfficeNumber'); 
         $xw->text($this->employer->getTaxOfficeNumber()); 
         $xw->endElement();
-        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeReference'); 
+        $xw->startElement('Key'); 
+        $xw->writeAttribute('Type','TaxOfficeReference'); 
         $xw->text($this->employer->getTaxOfficeReference()); 
         $xw->endElement();
         $xw->endElement(); // Keys
