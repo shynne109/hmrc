@@ -69,7 +69,7 @@ class P11D extends GovTalk
     private string $irMark = '';
     private bool $generateIRmark = true;
 
-    private const MESSAGE_CLASS = 'IR-P11D-EXB';
+    private const MESSAGE_CLASS = 'IR-PAYE-EXB';
     private const MESSAGE_QUALIFIER = 'request';
     private const MESSAGE_FUNCTION = 'submit';
     private const SCHEMA_VERSION = '1.0';
