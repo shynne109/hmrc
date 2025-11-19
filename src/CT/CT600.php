@@ -6,7 +6,9 @@ use XMLWriter;
 use DOMDocument;
 use HMRC\GovTalk;
 use Psr\Log\NullLogger;
+use HMRC\PAYE\AgentDetails;
 use Psr\Log\LoggerInterface;
+use HMRC\PAYE\ReportingCompany;
 
 /**
  * Minimal Corporation Tax (CT600) return builder (v1.993 schema subset).
@@ -33,6 +35,10 @@ class CT600 extends GovTalk
     private string $companyRegNo;
     private string $companyType = '';
     private string $returnType = 'new';
+
+    private ReportingCompany $employer;
+
+    private string $senderType = 'Employer';
     // CompanyInformation extensions
     private ?array $northernIreland = null; // ['NItradingActivity'=>'yes'/'no', 'SME'=>'yes'/'no', 'NIemployer'=>'yes'/'no', 'SpecialCircumstances'=>'yes'/'no']
     // ReturnInfoSummary extensions
@@ -102,7 +108,6 @@ class CT600 extends GovTalk
     private ?string $dateSent = null;
     private ?string $taxpayerName = null;
     private ?string $principalBusinessActivity = null;
-    private ?array $agentDetails = null;
     private ?array $authentication = null;
     private ?array $companyAddress = null;
     private ?array $taxOffice = null;
@@ -198,34 +203,83 @@ class CT600 extends GovTalk
     private ?string $goodsExported = null;
     private ?string $servicesExported = null;
     private ?string $neitherGoodsNorServicesExported = null;
-    
+
     // CT600P Supplementary form properties for AVEC/VGEC calculations
     private array $ct600pData = [
         // Audio-Visual Expenditure Credit sections
-        'P5A' => 0.0, 'P5B' => 0.0, 'P5C' => 0.0,
-        'P10A' => 0.0, 'P10B' => 0.0, 'P10C' => 0.0,
-        'P15A' => 0.0, 'P15B' => 0.0, 'P15C' => 0.0,
-        'P20A' => 0.0, 'P20B' => 0.0, 'P20C' => 0.0,
-        'P25A' => 0.0, 'P25B' => 0.0, 'P25C' => 0.0,
-        'P30A' => 0.0, 'P30B' => 0.0, 'P30C' => 0.0,
-        
+        'P5A' => 0.0,
+        'P5B' => 0.0,
+        'P5C' => 0.0,
+        'P10A' => 0.0,
+        'P10B' => 0.0,
+        'P10C' => 0.0,
+        'P15A' => 0.0,
+        'P15B' => 0.0,
+        'P15C' => 0.0,
+        'P20A' => 0.0,
+        'P20B' => 0.0,
+        'P20C' => 0.0,
+        'P25A' => 0.0,
+        'P25B' => 0.0,
+        'P25C' => 0.0,
+        'P30A' => 0.0,
+        'P30B' => 0.0,
+        'P30C' => 0.0,
+
         // Video Games Expenditure Credit sections
-        'P35A' => 0.0, 'P35B' => 0.0, 'P35C' => 0.0,
-        'P45A' => 0.0, 'P45B' => 0.0, 'P45C' => 0.0,
-        
+        'P35A' => 0.0,
+        'P35B' => 0.0,
+        'P35C' => 0.0,
+        'P45A' => 0.0,
+        'P45B' => 0.0,
+        'P45C' => 0.0,
+
         // Step calculations
-        'P50' => 0.0, 'P55' => 0.0, 'P60' => 0.0, 'P65' => 0.0, 'P70' => 0.0,
-        'P75' => 0.0, 'P80' => 0.0, 'P85' => 0.0, 'P90' => 0.0, 'P95' => 0.0,
-        'P100' => 0.0, 'P105' => 0.0, 'P110' => 0.0, 'P115' => 0.0, 'P120' => 0.0,
-        'P125' => 0.0, 'P130' => 0.0, 'P135' => 0.0, 'P140' => 0.0, 'P145' => 0.0,
-        'P150' => 0.0, 'P155' => 0.0, 'P160' => 0.0, 'P165' => 0.0, 'P170' => 0.0,
-        'P175' => 0.0, 'P180' => 0.0, 'P185' => 0.0, 'P190' => 0.0, 'P195' => 0.0,
-        'P200' => 0.0, 'P205' => 0.0, 'P215' => 0.0, 'P220' => 0.0, 'P230' => 0.0,
-        'P235' => 0.0, 'P240' => 0.0, 'P245' => 0.0, 'P310' => 0.0, 'P315' => 0.0,
-        'P325' => 0.0, 'P330' => 0.0
+        'P50' => 0.0,
+        'P55' => 0.0,
+        'P60' => 0.0,
+        'P65' => 0.0,
+        'P70' => 0.0,
+        'P75' => 0.0,
+        'P80' => 0.0,
+        'P85' => 0.0,
+        'P90' => 0.0,
+        'P95' => 0.0,
+        'P100' => 0.0,
+        'P105' => 0.0,
+        'P110' => 0.0,
+        'P115' => 0.0,
+        'P120' => 0.0,
+        'P125' => 0.0,
+        'P130' => 0.0,
+        'P135' => 0.0,
+        'P140' => 0.0,
+        'P145' => 0.0,
+        'P150' => 0.0,
+        'P155' => 0.0,
+        'P160' => 0.0,
+        'P165' => 0.0,
+        'P170' => 0.0,
+        'P175' => 0.0,
+        'P180' => 0.0,
+        'P185' => 0.0,
+        'P190' => 0.0,
+        'P195' => 0.0,
+        'P200' => 0.0,
+        'P205' => 0.0,
+        'P215' => 0.0,
+        'P220' => 0.0,
+        'P230' => 0.0,
+        'P235' => 0.0,
+        'P240' => 0.0,
+        'P245' => 0.0,
+        'P310' => 0.0,
+        'P315' => 0.0,
+        'P325' => 0.0,
+        'P330' => 0.0
     ];
     private bool $ct600pPresent = false;
-    
+
     // CT600E Charity supplementary form properties
     private array $ct600eData = [];
     private bool $ct600ePresent = false;
@@ -278,31 +332,30 @@ class CT600 extends GovTalk
     public const MESSAGE_CLASS = 'HMRC-CT-CT600';
     private const NS = 'http://www.govtalk.gov.uk/taxation/CT/5';
 
+    private ?AgentDetails $agentDetails = null;
+
+
+
     public function __construct(
         string $senderId,
         string $password,
-        string $utr,
+        ReportingCompany $employer,
         string $periodFrom,
         string $periodTo,
         string $periodEnd,
-        string $companyName,
-        string $companyRegNo,
         bool $testMode = true,
         ?string $customTestEndpoint = null
     ) {
+        $this->employer = $employer;
         $this->testMode = $testMode;
         $this->customTestEndpoint = $customTestEndpoint;
         $endpoint = $this->resolveEndpoint();
         parent::__construct($endpoint, $senderId, $password);
-        $this->utr = $utr;
         $this->periodFrom = $periodFrom;
         $this->periodTo = $periodTo;
         $this->periodEnd = $periodEnd;
-        $this->companyName = $companyName;
-        $this->companyRegNo = $companyRegNo;
         $this->setMessageAuthentication('clear');
         $this->setTestFlag($this->testMode);
-        $this->addMessageKey('UTR', $utr);
         $this->logger = new NullLogger();
     }
 
@@ -316,6 +369,19 @@ class CT600 extends GovTalk
     {
         return $this->testMode ? ($this->customTestEndpoint ?: $this->devEndpoint) : $this->liveEndpoint;
     }
+
+
+    public function setAgentDetails(AgentDetails $agentDetails): self
+    {
+        $this->agentDetails = $agentDetails;
+        return $this;
+    }
+
+    public function getAgentDetails(): ?AgentDetails
+    {
+        return $this->agentDetails;
+    }
+
 
     public function setReturnType(string $type): self
     {
@@ -431,175 +497,815 @@ class CT600 extends GovTalk
         $this->productVersion = $productVersion;
     }
 
-    public function setOtherFinancialConcerns(?string $v): self { $this->otherFinancialConcerns = $v; return $this; }
-    public function setIncomeStatedNetFlag(?string $v): self { $this->incomeStatedNetFlag = $v; return $this; }
-    public function setLossesBroughtForwardOverall(float $v): self { $this->lossesBroughtForwardOverall = $v; return $this; }
-    public function setUnquotedShares(float $v): self { $this->unquotedShares = $v; return $this; }
-    public function setProfitsBeforeDonationsAndGroupRelief(float $v): self { $this->profitsBeforeDonationsAndGroupRelief = $v; return $this; }
-    public function setCorporationTax(float $v): self { $this->corporationTax = $v; return $this; }
-    public function setMarginalReliefForRingFenceTrades(float $v): self { $this->marginalReliefForRingFenceTrades = $v; return $this; }
-    public function setDoubleTaxationRelief(float $v): self { $this->doubleTaxationRelief = $v; return $this; }
-    public function setUnderlyingRate(?string $v): self { $this->underlyingRate = $v; return $this; }
-    public function setAmountCarriedBack(?string $v): self { $this->amountCarriedBack = $v; return $this; }
-    public function setAdvancedCorporationTax(float $v): self { $this->advancedCorporationTax = $v; return $this; }
-    public function setTotalReliefsAndDeductions(float $v): self { $this->totalReliefsAndDeductions = $v; return $this; }
-    public function setEogplAmounts(float $v): self { $this->eogplAmounts = $v; return $this; }
-    public function setLoansToParticipators(float $v): self { $this->loansToParticipators = $v; return $this; }
-    public function setCt600aReliefDue(?string $v): self { $this->ct600aReliefDue = $v; return $this; }
-    public function setCfcTaxPayable(float $v): self { $this->cfcTaxPayable = $v; return $this; }
-    public function setBankLevyPayable(float $v): self { $this->bankLevyPayable = $v; return $this; }
-    public function setBankSurchargePayable(float $v): self { $this->bankSurchargePayable = $v; return $this; }
-    public function setRpdtPayable(float $v): self { $this->rpdtPayable = $v; return $this; }
-    public function setCfcAndBankLevyTotal(float $v): self { $this->cfcAndBankLevyTotal = $v; return $this; }
-    public function setEogplPayable(float $v): self { $this->eogplPayable = $v; return $this; }
-    public function setEglPayable(float $v): self { $this->eglPayable = $v; return $this; }
-    public function setSupplementaryCharge(float $v): self { $this->supplementaryCharge = $v; return $this; }
-    public function setDeductedIncomeTax(float $v): self { $this->deductedIncomeTax = $v; return $this; }
-    public function setTaxRepayable(float $v): self { $this->taxRepayable = $v; return $this; }
-    public function setCjrsOverpaymentsNowDue(float $v): self { $this->cjrsOverpaymentsNowDue = $v; return $this; }
-    public function setRestitutionTax(float $v): self { $this->restitutionTax = $v; return $this; }
-    public function setTaxPayableIncludingRestitutionTax(float $v): self { $this->taxPayableIncludingRestitutionTax = $v; return $this; }
-    public function setResearchAndDevelopmentCredit(float $v): self { $this->researchAndDevelopmentCredit = $v; return $this; }
-    public function setVaccineCredit(float $v): self { $this->vaccineCredit = $v; return $this; }
-    public function setCreativeCredit(float $v): self { $this->creativeCredit = $v; return $this; }
-    public function setAvecAndVgec(float $v): self { $this->avecAndVgec = $v; return $this; }
-    public function setResearchAndDevelopmentVaccineOrCreativeTaxCredit(float $v): self { $this->researchAndDevelopmentVaccineOrCreativeTaxCredit = $v; return $this; }
-    public function setLandRemediationCredit(float $v): self { $this->landRemediationCredit = $v; return $this; }
-    public function setLifeAssuranceCompanyCredit(float $v): self { $this->lifeAssuranceCompanyCredit = $v; return $this; }
-    public function setLandOrLifeCredit(float $v): self { $this->landOrLifeCredit = $v; return $this; }
-    public function setCapitalAllowancesFirstYearCredit(float $v): self { $this->capitalAllowancesFirstYearCredit = $v; return $this; }
-    public function setSurplusResearchAndDevelopmentCreditsOrCreativeCreditPayable(float $v): self { $this->surplusResearchAndDevelopmentCreditsOrCreativeCreditPayable = $v; return $this; }
-    public function setLandOrLifeCreditPayable(float $v): self { $this->landOrLifeCreditPayable = $v; return $this; }
-    public function setCapitalAllowancesFirstYearCreditPayable(float $v): self { $this->capitalAllowancesFirstYearCreditPayable = $v; return $this; }
-    public function setRingFenceCorpTaxIncluded(float $v): self { $this->ringFenceCorpTaxIncluded = $v; return $this; }
-    public function setNiCorporationTaxIncluded(float $v): self { $this->niCorporationTaxIncluded = $v; return $this; }
-    public function setRingFenceSupplementaryChargeIncluded(float $v): self { $this->ringFenceSupplementaryChargeIncluded = $v; return $this; }
-    public function setTaxAlreadyPaid(float $v): self { $this->taxAlreadyPaid = $v; return $this; }
-    public function setRefundsSurrendered(float $v): self { $this->refundsSurrendered = $v; return $this; }
-    public function setAvecVgecSurrenderedToThisCompany(float $v): self { $this->avecVgecSurrenderedToThisCompany = $v; return $this; }
-    public function setRandDExpenditureCreditsSurrendered(float $v): self { $this->randDExpenditureCreditsSurrendered = $v; return $this; }
-    public function setGoodsExported(?string $v): self { $this->goodsExported = $v; return $this; }
-    public function setServicesExported(?string $v): self { $this->servicesExported = $v; return $this; }
-    public function setNeitherGoodsNorServicesExported(?string $v): self { $this->neitherGoodsNorServicesExported = $v; return $this; }
-    public function setNumberOf51groupCompanies(float $v): self { $this->numberOf51groupCompanies = $v; return $this; }
-    public function setInstalmentPayments(?string $v): self { $this->instalmentPayments = $v; return $this; }
-    public function setVeryLargeQIPs(?string $v): self { $this->veryLargeQIPs = $v; return $this; }
-    public function setGroupPayment(?string $v): self { $this->groupPayment = $v; return $this; }
-    public function setIntangibleAssets(?string $v): self { $this->intangibleAssets = $v; return $this; }
-    public function setCrossBorderRoyalty(?string $v): self { $this->crossBorderRoyalty = $v; return $this; }
-    public function setEatOutToHelpOutScheme(float $v): self { $this->eatOutToHelpOutScheme = $v; return $this; }
-    public function setSmeClaim(?string $v): self { $this->smeClaim = $v; return $this; }
-    public function setRAndDIntensiveSMEclaim(?string $v): self { $this->rAndDIntensiveSMEclaim = $v; return $this; }
-    public function setLargeCompanyClaim(?string $v): self { $this->largeCompanyClaim = $v; return $this; }
-    public function setRAndDClaimNotificationForm(?string $v): self { $this->rAndDClaimNotificationForm = $v; return $this; }
-    public function setAdditionalRAndDForm(?string $v): self { $this->additionalRAndDForm = $v; return $this; }
-    public function setAdditionalCreativesForm(?string $v): self { $this->additionalCreativesForm = $v; return $this; }
-    public function setRAndDExpenditureSME(float $v): self { $this->rAndDExpenditureSME = $v; return $this; }
-    public function setRandDEnhancedExpenditure(float $v): self { $this->randDEnhancedExpenditure = $v; return $this; }
-    public function setCreativesCoreExpenditure(float $v): self { $this->creativesCoreExpenditure = $v; return $this; }
-    public function setCreativeEnhancedExpenditure(float $v): self { $this->creativeEnhancedExpenditure = $v; return $this; }
-    public function setRandDAndCreativeEnhancedExpenditure(float $v): self { $this->randDAndCreativeEnhancedExpenditure = $v; return $this; }
-    public function setSmeClaimAsLargeCompany(float $v): self { $this->smeClaimAsLargeCompany = $v; return $this; }
-    public function setVaccineResearch(float $v): self { $this->vaccineResearch = $v; return $this; }
-    public function setLandRemediationEnhancedExpenditure(float $v): self { $this->landRemediationEnhancedExpenditure = $v; return $this; }
-    public function setAllowancesAndCharges(?array $v): self { $this->allowancesAndCharges = $v; return $this; }
-    public function setNotIncluded(?array $v): self { $this->notIncluded = $v; return $this; }
-    public function setQualifyingExpenditure(?array $v): self { $this->qualifyingExpenditure = $v; return $this; }
-    public function setLossesDeficitsAndExcess(?array $v): self { $this->lossesDeficitsAndExcess = $v; return $this; }
-    public function setNorthernIrelandInformation(?array $v): self { $this->northernIrelandInformation = $v; return $this; }
-    public function setOwnRepaymentsLowerLimit(float $v): self { $this->ownRepaymentsLowerLimit = $v; return $this; }
-    public function setRepaymentsForThePeriodCoveredByThisReturn(?array $v): self { $this->repaymentsForThePeriodCoveredByThisReturn = $v; return $this; }
-    public function setRAndDCreditWithCondition(?string $v): self { $this->rAndDCreditWithCondition = $v; return $this; }
-    public function setPaymentToPerson(?array $v): self { $this->paymentToPerson = $v; return $this; }
-    public function setBeforeEndPeriod(?string $v): self { $this->beforeEndPeriod = $v; return $this; }
-    public function setLoansInformation(?array $v): self { $this->loansInformation = $v; return $this; }
-    public function setTaxPayableLoans(float $v): self { $this->taxPayableLoans = $v; return $this; }
-    public function setControlledForeignCompanies(?array $v): self { $this->controlledForeignCompanies = $v; return $this; }
-    public function setGroupAndConsortium(?array $v): self { $this->groupAndConsortium = $v; return $this; }
-    public function setInsuranceDeclaration(?string $v): self { $this->insuranceDeclaration = $v; return $this; }
-    public function setCharity(?array $v): self { $this->charity = $v; return $this; }
-    public function setTonnageTax(?array $v): self { $this->tonnageTax = $v; return $this; }
-    public function setWelshReturn(?string $v): self { $this->welshReturn = $v; return $this; }
-    public function setJointAccounts(?string $v): self { $this->jointAccounts = $v; return $this; }
-    public function setFrankedInvestmentIncome(float $v): self { $this->frankedInvestmentIncome = $v; return $this; }
+    public function setSenderType(string $type): void
+    {
+        $this->senderType = $type; // e.g. 'Agent' or 'Employer'
+    }
+
+    public function setOtherFinancialConcerns(?string $v): self
+    {
+        $this->otherFinancialConcerns = $v;
+        return $this;
+    }
+    public function setIncomeStatedNetFlag(?string $v): self
+    {
+        $this->incomeStatedNetFlag = $v;
+        return $this;
+    }
+    public function setLossesBroughtForwardOverall(float $v): self
+    {
+        $this->lossesBroughtForwardOverall = $v;
+        return $this;
+    }
+    public function setUnquotedShares(float $v): self
+    {
+        $this->unquotedShares = $v;
+        return $this;
+    }
+    public function setProfitsBeforeDonationsAndGroupRelief(float $v): self
+    {
+        $this->profitsBeforeDonationsAndGroupRelief = $v;
+        return $this;
+    }
+    public function setCorporationTax(float $v): self
+    {
+        $this->corporationTax = $v;
+        return $this;
+    }
+    public function setMarginalReliefForRingFenceTrades(float $v): self
+    {
+        $this->marginalReliefForRingFenceTrades = $v;
+        return $this;
+    }
+    public function setDoubleTaxationRelief(float $v): self
+    {
+        $this->doubleTaxationRelief = $v;
+        return $this;
+    }
+    public function setUnderlyingRate(?string $v): self
+    {
+        $this->underlyingRate = $v;
+        return $this;
+    }
+    public function setAmountCarriedBack(?string $v): self
+    {
+        $this->amountCarriedBack = $v;
+        return $this;
+    }
+    public function setAdvancedCorporationTax(float $v): self
+    {
+        $this->advancedCorporationTax = $v;
+        return $this;
+    }
+    public function setTotalReliefsAndDeductions(float $v): self
+    {
+        $this->totalReliefsAndDeductions = $v;
+        return $this;
+    }
+    public function setEogplAmounts(float $v): self
+    {
+        $this->eogplAmounts = $v;
+        return $this;
+    }
+    public function setLoansToParticipators(float $v): self
+    {
+        $this->loansToParticipators = $v;
+        return $this;
+    }
+    public function setCt600aReliefDue(?string $v): self
+    {
+        $this->ct600aReliefDue = $v;
+        return $this;
+    }
+    public function setCfcTaxPayable(float $v): self
+    {
+        $this->cfcTaxPayable = $v;
+        return $this;
+    }
+    public function setBankLevyPayable(float $v): self
+    {
+        $this->bankLevyPayable = $v;
+        return $this;
+    }
+    public function setBankSurchargePayable(float $v): self
+    {
+        $this->bankSurchargePayable = $v;
+        return $this;
+    }
+    public function setRpdtPayable(float $v): self
+    {
+        $this->rpdtPayable = $v;
+        return $this;
+    }
+    public function setCfcAndBankLevyTotal(float $v): self
+    {
+        $this->cfcAndBankLevyTotal = $v;
+        return $this;
+    }
+    public function setEogplPayable(float $v): self
+    {
+        $this->eogplPayable = $v;
+        return $this;
+    }
+    public function setEglPayable(float $v): self
+    {
+        $this->eglPayable = $v;
+        return $this;
+    }
+    public function setSupplementaryCharge(float $v): self
+    {
+        $this->supplementaryCharge = $v;
+        return $this;
+    }
+    public function setDeductedIncomeTax(float $v): self
+    {
+        $this->deductedIncomeTax = $v;
+        return $this;
+    }
+    public function setTaxRepayable(float $v): self
+    {
+        $this->taxRepayable = $v;
+        return $this;
+    }
+    public function setCjrsOverpaymentsNowDue(float $v): self
+    {
+        $this->cjrsOverpaymentsNowDue = $v;
+        return $this;
+    }
+    public function setRestitutionTax(float $v): self
+    {
+        $this->restitutionTax = $v;
+        return $this;
+    }
+    public function setTaxPayableIncludingRestitutionTax(float $v): self
+    {
+        $this->taxPayableIncludingRestitutionTax = $v;
+        return $this;
+    }
+    public function setResearchAndDevelopmentCredit(float $v): self
+    {
+        $this->researchAndDevelopmentCredit = $v;
+        return $this;
+    }
+    public function setVaccineCredit(float $v): self
+    {
+        $this->vaccineCredit = $v;
+        return $this;
+    }
+    public function setCreativeCredit(float $v): self
+    {
+        $this->creativeCredit = $v;
+        return $this;
+    }
+    public function setAvecAndVgec(float $v): self
+    {
+        $this->avecAndVgec = $v;
+        return $this;
+    }
+    public function setResearchAndDevelopmentVaccineOrCreativeTaxCredit(float $v): self
+    {
+        $this->researchAndDevelopmentVaccineOrCreativeTaxCredit = $v;
+        return $this;
+    }
+    public function setLandRemediationCredit(float $v): self
+    {
+        $this->landRemediationCredit = $v;
+        return $this;
+    }
+    public function setLifeAssuranceCompanyCredit(float $v): self
+    {
+        $this->lifeAssuranceCompanyCredit = $v;
+        return $this;
+    }
+    public function setLandOrLifeCredit(float $v): self
+    {
+        $this->landOrLifeCredit = $v;
+        return $this;
+    }
+    public function setCapitalAllowancesFirstYearCredit(float $v): self
+    {
+        $this->capitalAllowancesFirstYearCredit = $v;
+        return $this;
+    }
+    public function setSurplusResearchAndDevelopmentCreditsOrCreativeCreditPayable(float $v): self
+    {
+        $this->surplusResearchAndDevelopmentCreditsOrCreativeCreditPayable = $v;
+        return $this;
+    }
+    public function setLandOrLifeCreditPayable(float $v): self
+    {
+        $this->landOrLifeCreditPayable = $v;
+        return $this;
+    }
+    public function setCapitalAllowancesFirstYearCreditPayable(float $v): self
+    {
+        $this->capitalAllowancesFirstYearCreditPayable = $v;
+        return $this;
+    }
+    public function setRingFenceCorpTaxIncluded(float $v): self
+    {
+        $this->ringFenceCorpTaxIncluded = $v;
+        return $this;
+    }
+    public function setNiCorporationTaxIncluded(float $v): self
+    {
+        $this->niCorporationTaxIncluded = $v;
+        return $this;
+    }
+    public function setRingFenceSupplementaryChargeIncluded(float $v): self
+    {
+        $this->ringFenceSupplementaryChargeIncluded = $v;
+        return $this;
+    }
+    public function setTaxAlreadyPaid(float $v): self
+    {
+        $this->taxAlreadyPaid = $v;
+        return $this;
+    }
+    public function setRefundsSurrendered(float $v): self
+    {
+        $this->refundsSurrendered = $v;
+        return $this;
+    }
+    public function setAvecVgecSurrenderedToThisCompany(float $v): self
+    {
+        $this->avecVgecSurrenderedToThisCompany = $v;
+        return $this;
+    }
+    public function setRandDExpenditureCreditsSurrendered(float $v): self
+    {
+        $this->randDExpenditureCreditsSurrendered = $v;
+        return $this;
+    }
+    public function setGoodsExported(?string $v): self
+    {
+        $this->goodsExported = $v;
+        return $this;
+    }
+    public function setServicesExported(?string $v): self
+    {
+        $this->servicesExported = $v;
+        return $this;
+    }
+    public function setNeitherGoodsNorServicesExported(?string $v): self
+    {
+        $this->neitherGoodsNorServicesExported = $v;
+        return $this;
+    }
+    public function setNumberOf51groupCompanies(float $v): self
+    {
+        $this->numberOf51groupCompanies = $v;
+        return $this;
+    }
+    public function setInstalmentPayments(?string $v): self
+    {
+        $this->instalmentPayments = $v;
+        return $this;
+    }
+    public function setVeryLargeQIPs(?string $v): self
+    {
+        $this->veryLargeQIPs = $v;
+        return $this;
+    }
+    public function setGroupPayment(?string $v): self
+    {
+        $this->groupPayment = $v;
+        return $this;
+    }
+    public function setIntangibleAssets(?string $v): self
+    {
+        $this->intangibleAssets = $v;
+        return $this;
+    }
+    public function setCrossBorderRoyalty(?string $v): self
+    {
+        $this->crossBorderRoyalty = $v;
+        return $this;
+    }
+    public function setEatOutToHelpOutScheme(float $v): self
+    {
+        $this->eatOutToHelpOutScheme = $v;
+        return $this;
+    }
+    public function setSmeClaim(?string $v): self
+    {
+        $this->smeClaim = $v;
+        return $this;
+    }
+    public function setRAndDIntensiveSMEclaim(?string $v): self
+    {
+        $this->rAndDIntensiveSMEclaim = $v;
+        return $this;
+    }
+    public function setLargeCompanyClaim(?string $v): self
+    {
+        $this->largeCompanyClaim = $v;
+        return $this;
+    }
+    public function setRAndDClaimNotificationForm(?string $v): self
+    {
+        $this->rAndDClaimNotificationForm = $v;
+        return $this;
+    }
+    public function setAdditionalRAndDForm(?string $v): self
+    {
+        $this->additionalRAndDForm = $v;
+        return $this;
+    }
+    public function setAdditionalCreativesForm(?string $v): self
+    {
+        $this->additionalCreativesForm = $v;
+        return $this;
+    }
+    public function setRAndDExpenditureSME(float $v): self
+    {
+        $this->rAndDExpenditureSME = $v;
+        return $this;
+    }
+    public function setRandDEnhancedExpenditure(float $v): self
+    {
+        $this->randDEnhancedExpenditure = $v;
+        return $this;
+    }
+    public function setCreativesCoreExpenditure(float $v): self
+    {
+        $this->creativesCoreExpenditure = $v;
+        return $this;
+    }
+    public function setCreativeEnhancedExpenditure(float $v): self
+    {
+        $this->creativeEnhancedExpenditure = $v;
+        return $this;
+    }
+    public function setRandDAndCreativeEnhancedExpenditure(float $v): self
+    {
+        $this->randDAndCreativeEnhancedExpenditure = $v;
+        return $this;
+    }
+    public function setSmeClaimAsLargeCompany(float $v): self
+    {
+        $this->smeClaimAsLargeCompany = $v;
+        return $this;
+    }
+    public function setVaccineResearch(float $v): self
+    {
+        $this->vaccineResearch = $v;
+        return $this;
+    }
+    public function setLandRemediationEnhancedExpenditure(float $v): self
+    {
+        $this->landRemediationEnhancedExpenditure = $v;
+        return $this;
+    }
+    public function setAllowancesAndCharges(?array $v): self
+    {
+        $this->allowancesAndCharges = $v;
+        return $this;
+    }
+    public function setNotIncluded(?array $v): self
+    {
+        $this->notIncluded = $v;
+        return $this;
+    }
+    public function setQualifyingExpenditure(?array $v): self
+    {
+        $this->qualifyingExpenditure = $v;
+        return $this;
+    }
+    public function setLossesDeficitsAndExcess(?array $v): self
+    {
+        $this->lossesDeficitsAndExcess = $v;
+        return $this;
+    }
+    public function setNorthernIrelandInformation(?array $v): self
+    {
+        $this->northernIrelandInformation = $v;
+        return $this;
+    }
+    public function setOwnRepaymentsLowerLimit(float $v): self
+    {
+        $this->ownRepaymentsLowerLimit = $v;
+        return $this;
+    }
+    public function setRepaymentsForThePeriodCoveredByThisReturn(?array $v): self
+    {
+        $this->repaymentsForThePeriodCoveredByThisReturn = $v;
+        return $this;
+    }
+    public function setRAndDCreditWithCondition(?string $v): self
+    {
+        $this->rAndDCreditWithCondition = $v;
+        return $this;
+    }
+    public function setPaymentToPerson(?array $v): self
+    {
+        $this->paymentToPerson = $v;
+        return $this;
+    }
+    public function setBeforeEndPeriod(?string $v): self
+    {
+        $this->beforeEndPeriod = $v;
+        return $this;
+    }
+    public function setLoansInformation(?array $v): self
+    {
+        $this->loansInformation = $v;
+        return $this;
+    }
+    public function setTaxPayableLoans(float $v): self
+    {
+        $this->taxPayableLoans = $v;
+        return $this;
+    }
+    public function setControlledForeignCompanies(?array $v): self
+    {
+        $this->controlledForeignCompanies = $v;
+        return $this;
+    }
+    public function setGroupAndConsortium(?array $v): self
+    {
+        $this->groupAndConsortium = $v;
+        return $this;
+    }
+    public function setInsuranceDeclaration(?string $v): self
+    {
+        $this->insuranceDeclaration = $v;
+        return $this;
+    }
+    public function setCharity(?array $v): self
+    {
+        $this->charity = $v;
+        return $this;
+    }
+    public function setTonnageTax(?array $v): self
+    {
+        $this->tonnageTax = $v;
+        return $this;
+    }
+    public function setWelshReturn(?string $v): self
+    {
+        $this->welshReturn = $v;
+        return $this;
+    }
+    public function setJointAccounts(?string $v): self
+    {
+        $this->jointAccounts = $v;
+        return $this;
+    }
+    public function setFrankedInvestmentIncome(float $v): self
+    {
+        $this->frankedInvestmentIncome = $v;
+        return $this;
+    }
     public function setNorthernIreland(?array $ni): self
     {
         $this->northernIreland = $ni;
         return $this;
     }
 
-    public function setThisPeriod(?string $type): self { $this->thisPeriod = $type; return $this; }
-    public function setEarlierPeriod(?string $type): self { $this->earlierPeriod = $type; return $this; }
-    public function setMultipleReturns(?string $type): self { $this->multipleReturns = $type; return $this; }
-    public function setProvisionalFigures(?string $type): self { $this->provisionalFigures = $type; return $this; }
-    public function setPartOfNonSmallGroup(?string $type): self { $this->partOfNonSmallGroup = $type; return $this; }
-    public function setRegisteredAvoidanceScheme(?string $type): self { $this->registeredAvoidanceScheme = $type; return $this; }
+    public function setThisPeriod(?string $type): self
+    {
+        $this->thisPeriod = $type;
+        return $this;
+    }
+    public function setEarlierPeriod(?string $type): self
+    {
+        $this->earlierPeriod = $type;
+        return $this;
+    }
+    public function setMultipleReturns(?string $type): self
+    {
+        $this->multipleReturns = $type;
+        return $this;
+    }
+    public function setProvisionalFigures(?string $type): self
+    {
+        $this->provisionalFigures = $type;
+        return $this;
+    }
+    public function setPartOfNonSmallGroup(?string $type): self
+    {
+        $this->partOfNonSmallGroup = $type;
+        return $this;
+    }
+    public function setRegisteredAvoidanceScheme(?string $type): self
+    {
+        $this->registeredAvoidanceScheme = $type;
+        return $this;
+    }
 
-    public function setTransferPricing(?array $tp): self { $this->transferPricing = $tp; return $this; }
+    public function setTransferPricing(?array $tp): self
+    {
+        $this->transferPricing = $tp;
+        return $this;
+    }
 
-    public function setTaxOfficeNumber(?string $v): self { $this->taxOfficeNumber = $v; return $this; }
-    public function setTaxOfficeReference(?string $v): self { $this->taxOfficeReference = $v; return $this; }
-    public function setDateSent(?string $v): self { $this->dateSent = $v; return $this; }
-    public function setTaxpayerName(?string $v): self { $this->taxpayerName = $v; return $this; }
-    public function setPrincipalBusinessActivity(?string $v): self { $this->principalBusinessActivity = $v; return $this; }
-    public function setAgentDetails(?array $v): self { $this->agentDetails = $v; return $this; }
-    public function setAuthentication(?array $v): self { $this->authentication = $v; return $this; }
-    public function setCompanyAddress(?array $v): self { $this->companyAddress = $v; return $this; }
-    public function setTaxOffice(?array $v): self { $this->taxOffice = $v; return $this; }
-    public function setShares(?array $v): self { $this->shares = $v; return $this; }
-    public function setContactDetails(?array $v): self { $this->contactDetails = $v; return $this; }
-    public function setSignificantEvent(?string $v): self { $this->significantEvent = $v; return $this; }
-    public function setLossesCarriedBackSummary(?float $v): self { $this->lossesCarriedBackSummary = $v; return $this; }
-    public function setLossesCarriedForwardSummary(?float $v): self { $this->lossesCarriedForwardSummary = $v; return $this; }
-    public function setGroupReliefClaimed(?float $v): self { $this->groupReliefClaimed = $v; return $this; }
-    public function setNoTaxLiabilityReason(?string $v): self { $this->noTaxLiabilityReason = $v; return $this; }
-    public function setRingFenceCalculation(?array $v): self { $this->ringFenceCalculation = $v; return $this; }
-    public function setNorthernIrelandCalculation(?array $v): self { $this->northernIrelandCalculation = $v; return $this; }
-    public function setLossesAndDeficits(?array $v): self { $this->lossesAndDeficits = $v; return $this; }
+    public function setTaxOfficeNumber(?string $v): self
+    {
+        $this->taxOfficeNumber = $v;
+        return $this;
+    }
+    public function setTaxOfficeReference(?string $v): self
+    {
+        $this->taxOfficeReference = $v;
+        return $this;
+    }
+    public function setDateSent(?string $v): self
+    {
+        $this->dateSent = $v;
+        return $this;
+    }
+    public function setTaxpayerName(?string $v): self
+    {
+        $this->taxpayerName = $v;
+        return $this;
+    }
+    public function setPrincipalBusinessActivity(?string $v): self
+    {
+        $this->principalBusinessActivity = $v;
+        return $this;
+    }
+    public function setAuthentication(?array $v): self
+    {
+        $this->authentication = $v;
+        return $this;
+    }
+    public function setCompanyAddress(?array $v): self
+    {
+        $this->companyAddress = $v;
+        return $this;
+    }
+    public function setTaxOffice(?array $v): self
+    {
+        $this->taxOffice = $v;
+        return $this;
+    }
+    public function setShares(?array $v): self
+    {
+        $this->shares = $v;
+        return $this;
+    }
+    public function setContactDetails(?array $v): self
+    {
+        $this->contactDetails = $v;
+        return $this;
+    }
+    public function setSignificantEvent(?string $v): self
+    {
+        $this->significantEvent = $v;
+        return $this;
+    }
+    public function setLossesCarriedBackSummary(?float $v): self
+    {
+        $this->lossesCarriedBackSummary = $v;
+        return $this;
+    }
+    public function setLossesCarriedForwardSummary(?float $v): self
+    {
+        $this->lossesCarriedForwardSummary = $v;
+        return $this;
+    }
+    public function setGroupReliefClaimed(?float $v): self
+    {
+        $this->groupReliefClaimed = $v;
+        return $this;
+    }
+    public function setNoTaxLiabilityReason(?string $v): self
+    {
+        $this->noTaxLiabilityReason = $v;
+        return $this;
+    }
+    public function setRingFenceCalculation(?array $v): self
+    {
+        $this->ringFenceCalculation = $v;
+        return $this;
+    }
+    public function setNorthernIrelandCalculation(?array $v): self
+    {
+        $this->northernIrelandCalculation = $v;
+        return $this;
+    }
+    public function setLossesAndDeficits(?array $v): self
+    {
+        $this->lossesAndDeficits = $v;
+        return $this;
+    }
     //public function setCommunityInvestmentRelief(?float $v): self { $this->communityInvestmentRelief = $v; return $this; }
-    public function setOtherReliefs(?float $v): self { $this->otherReliefs = $v; return $this; }
-    public function setOtherAttachments(?array $v): self { $this->otherAttachments = $v; return $this; }
-    public function setCjrsReceived(float $v): self { $this->cjrsReceived = $v; return $this; }
-    public function setCjrsDue(float $v): self { $this->cjrsDue = $v; return $this; }
-    public function setCjrsOverpaymentAlreadyAssessed(float $v): self { $this->cjrsOverpaymentAlreadyAssessed = $v; return $this; }
-    public function setJobRetentionBonusOverpayment(float $v): self { $this->jobRetentionBonusOverpayment = $v; return $this; }
-    public function setEnergyProfitsLevy(float $v): self { $this->energyProfitsLevy = $v; return $this; }
-    public function setEglAmounts(float $v): self { $this->eglAmounts = $v; return $this; }
-    public function setCalculationOfTaxOutstandingOrOverpaid(float $v): self { $this->calculationOfTaxOutstandingOrOverpaid = $v; return $this; }
-    public function setNetCorporationTaxLiability(float $v): self { $this->netCorporationTaxLiability = $v; return $this; }
-    public function setTaxChargeable(float $v): self { $this->taxChargeable = $v; return $this; }
-    public function setTaxPayable(float $v): self { $this->taxPayable = $v; return $this; }
-    public function setTaxOutstanding(float $v): self { $this->taxOutstanding = $v; return $this; }
-    public function setTaxOverpaid(float $v): self { $this->taxOverpaid = $v; return $this; }
-    public function setNonTradingLoanProfitsAndGains(float $v): self { $this->nonTradingLoanProfitsAndGains = $v; return $this; }
-    public function setIncomeStatedNet(float $v): self { $this->incomeStatedNet = $v; return $this; }
-    public function setNonLoanAnnuitiesAnnualPaymentsDiscounts(float $v): self { $this->nonLoanAnnuitiesAnnualPaymentsDiscounts = $v; return $this; }
-    public function setNonUKdividends(float $v): self { $this->nonUKdividends = $v; return $this; }
-    public function setDeductedIncome(float $v): self { $this->deductedIncome = $v; return $this; }
-    public function setPropertyBusinessIncome(float $v): self { $this->propertyBusinessIncome = $v; return $this; }
-    public function setNonTradingGainsIntangibles(float $v): self { $this->nonTradingGainsIntangibles = $v; return $this; }
-    public function setTonnageTaxProfits(float $v): self { $this->tonnageTaxProfits = $v; return $this; }
-    public function setOtherIncome(float $v): self { $this->otherIncome = $v; return $this; }
-    public function setChargeableGains(float $v): self { $this->chargeableGains = $v; return $this; }
-    public function setGrossGains(float $v): self { $this->grossGains = $v; return $this; }
-    public function setAllowableLosses(float $v): self { $this->allowableLosses = $v; return $this; }
-    public function setNetChargeableGains(float $v): self { $this->netChargeableGains = $v; return $this; }
-    public function setNonTradeDeficitsOnLoans(float $v): self { $this->nonTradeDeficitsOnLoans = $v; return $this; }
-    public function setCapitalAllowances(float $v): self { $this->capitalAllowances = $v; return $this; }
-    public function setManagementExpenses(float $v): self { $this->managementExpenses = $v; return $this; }
-    public function setUKPropertyBusinessLosses(float $v): self { $this->ukPropertyBusinessLosses = $v; return $this; }
-    public function setNonTradeDeficits(float $v): self { $this->nonTradeDeficits = $v; return $this; }
-    public function setCarriedForwardNonTradeDeficits(float $v): self { $this->carriedForwardNonTradeDeficits = $v; return $this; }
-    public function setNonTradingLossIntangibles(float $v): self { $this->nonTradingLossIntangibles = $v; return $this; }
-    public function setTradingLosses(float $v): self { $this->tradingLosses = $v; return $this; }
-    public function setHasTradingLossesCarriedBack(bool $v): self { $this->hasTradingLossesCarriedBack = $v; return $this; }
-    public function setTradingLossesCarriedForward(float $v): self { $this->tradingLossesCarriedForward = $v; return $this; }
-    public function setNonTradeCapitalAllowances(float $v): self { $this->nonTradeCapitalAllowances = $v; return $this; }
-    public function setQualifyingDonations(float $v): self { $this->qualifyingDonations = $v; return $this; }
-    public function setGroupRelief(?float $v): self { $this->groupRelief = $v; return $this; }
-    public function setGroupReliefForCarriedForwardLosses(?float $v): self { $this->groupReliefForCarriedForwardLosses = $v; return $this; }
-    public function setRingFenceProfitsIncluded(float $v): self { $this->ringFenceProfitsIncluded = $v; return $this; }
-    public function setNorthernIrelandProfitsIncluded(float $v): self { $this->northernIrelandProfitsIncluded = $v; return $this; }
+    public function setOtherReliefs(?float $v): self
+    {
+        $this->otherReliefs = $v;
+        return $this;
+    }
+    public function setOtherAttachments(?array $v): self
+    {
+        $this->otherAttachments = $v;
+        return $this;
+    }
+    public function setCjrsReceived(float $v): self
+    {
+        $this->cjrsReceived = $v;
+        return $this;
+    }
+    public function setCjrsDue(float $v): self
+    {
+        $this->cjrsDue = $v;
+        return $this;
+    }
+    public function setCjrsOverpaymentAlreadyAssessed(float $v): self
+    {
+        $this->cjrsOverpaymentAlreadyAssessed = $v;
+        return $this;
+    }
+    public function setJobRetentionBonusOverpayment(float $v): self
+    {
+        $this->jobRetentionBonusOverpayment = $v;
+        return $this;
+    }
+    public function setEnergyProfitsLevy(float $v): self
+    {
+        $this->energyProfitsLevy = $v;
+        return $this;
+    }
+    public function setEglAmounts(float $v): self
+    {
+        $this->eglAmounts = $v;
+        return $this;
+    }
+    public function setCalculationOfTaxOutstandingOrOverpaid(float $v): self
+    {
+        $this->calculationOfTaxOutstandingOrOverpaid = $v;
+        return $this;
+    }
+    public function setNetCorporationTaxLiability(float $v): self
+    {
+        $this->netCorporationTaxLiability = $v;
+        return $this;
+    }
+    public function setTaxChargeable(float $v): self
+    {
+        $this->taxChargeable = $v;
+        return $this;
+    }
+    public function setTaxPayable(float $v): self
+    {
+        $this->taxPayable = $v;
+        return $this;
+    }
+    public function setTaxOutstanding(float $v): self
+    {
+        $this->taxOutstanding = $v;
+        return $this;
+    }
+    public function setTaxOverpaid(float $v): self
+    {
+        $this->taxOverpaid = $v;
+        return $this;
+    }
+    public function setNonTradingLoanProfitsAndGains(float $v): self
+    {
+        $this->nonTradingLoanProfitsAndGains = $v;
+        return $this;
+    }
+    public function setIncomeStatedNet(float $v): self
+    {
+        $this->incomeStatedNet = $v;
+        return $this;
+    }
+    public function setNonLoanAnnuitiesAnnualPaymentsDiscounts(float $v): self
+    {
+        $this->nonLoanAnnuitiesAnnualPaymentsDiscounts = $v;
+        return $this;
+    }
+    public function setNonUKdividends(float $v): self
+    {
+        $this->nonUKdividends = $v;
+        return $this;
+    }
+    public function setDeductedIncome(float $v): self
+    {
+        $this->deductedIncome = $v;
+        return $this;
+    }
+    public function setPropertyBusinessIncome(float $v): self
+    {
+        $this->propertyBusinessIncome = $v;
+        return $this;
+    }
+    public function setNonTradingGainsIntangibles(float $v): self
+    {
+        $this->nonTradingGainsIntangibles = $v;
+        return $this;
+    }
+    public function setTonnageTaxProfits(float $v): self
+    {
+        $this->tonnageTaxProfits = $v;
+        return $this;
+    }
+    public function setOtherIncome(float $v): self
+    {
+        $this->otherIncome = $v;
+        return $this;
+    }
+    public function setChargeableGains(float $v): self
+    {
+        $this->chargeableGains = $v;
+        return $this;
+    }
+    public function setGrossGains(float $v): self
+    {
+        $this->grossGains = $v;
+        return $this;
+    }
+    public function setAllowableLosses(float $v): self
+    {
+        $this->allowableLosses = $v;
+        return $this;
+    }
+    public function setNetChargeableGains(float $v): self
+    {
+        $this->netChargeableGains = $v;
+        return $this;
+    }
+    public function setNonTradeDeficitsOnLoans(float $v): self
+    {
+        $this->nonTradeDeficitsOnLoans = $v;
+        return $this;
+    }
+    public function setCapitalAllowances(float $v): self
+    {
+        $this->capitalAllowances = $v;
+        return $this;
+    }
+    public function setManagementExpenses(float $v): self
+    {
+        $this->managementExpenses = $v;
+        return $this;
+    }
+    public function setUKPropertyBusinessLosses(float $v): self
+    {
+        $this->ukPropertyBusinessLosses = $v;
+        return $this;
+    }
+    public function setNonTradeDeficits(float $v): self
+    {
+        $this->nonTradeDeficits = $v;
+        return $this;
+    }
+    public function setCarriedForwardNonTradeDeficits(float $v): self
+    {
+        $this->carriedForwardNonTradeDeficits = $v;
+        return $this;
+    }
+    public function setNonTradingLossIntangibles(float $v): self
+    {
+        $this->nonTradingLossIntangibles = $v;
+        return $this;
+    }
+    public function setTradingLosses(float $v): self
+    {
+        $this->tradingLosses = $v;
+        return $this;
+    }
+    public function setHasTradingLossesCarriedBack(bool $v): self
+    {
+        $this->hasTradingLossesCarriedBack = $v;
+        return $this;
+    }
+    public function setTradingLossesCarriedForward(float $v): self
+    {
+        $this->tradingLossesCarriedForward = $v;
+        return $this;
+    }
+    public function setNonTradeCapitalAllowances(float $v): self
+    {
+        $this->nonTradeCapitalAllowances = $v;
+        return $this;
+    }
+    public function setQualifyingDonations(float $v): self
+    {
+        $this->qualifyingDonations = $v;
+        return $this;
+    }
+    public function setGroupRelief(?float $v): self
+    {
+        $this->groupRelief = $v;
+        return $this;
+    }
+    public function setGroupReliefForCarriedForwardLosses(?float $v): self
+    {
+        $this->groupReliefForCarriedForwardLosses = $v;
+        return $this;
+    }
+    public function setRingFenceProfitsIncluded(float $v): self
+    {
+        $this->ringFenceProfitsIncluded = $v;
+        return $this;
+    }
+    public function setNorthernIrelandProfitsIncluded(float $v): self
+    {
+        $this->northernIrelandProfitsIncluded = $v;
+        return $this;
+    }
 
 
     public function attachAccountsInlineXbrl(string $ixbrl, ?string $filename = null, bool $entryPoint = false, string $mode = 'encoded'): self
@@ -616,7 +1322,7 @@ class CT600 extends GovTalk
         return $this;
     }
 
-    
+
     public function setBankAccountDetails(
         string $bankName,
         string $sortCode,
@@ -646,7 +1352,7 @@ class CT600 extends GovTalk
         ];
         return $this;
     }
-    
+
     public function attachPdf(string $pdfContent, string $filename, string $type, ?string $description = null, bool $isBase64 = false): self
     {
         $this->pdfAttachments[] = [
@@ -687,7 +1393,7 @@ class CT600 extends GovTalk
         return $this;
     }
 
-   
+
     public function addSchedule(string $code, string $rawXmlFragment): self
     {
         $code = strtoupper($code);
@@ -738,7 +1444,7 @@ class CT600 extends GovTalk
     {
         $this->ct600eData = array_merge($this->ct600eData, $data);
         $this->ct600ePresent = true;
-        
+
         return $this;
     }
 
@@ -777,13 +1483,13 @@ class CT600 extends GovTalk
 
         // Company Information Validation (Error 9100-9108)
         $this->validateCompanyInformation($errors);
-        
+
         // Return Info Summary Validation (Error 9109-9136) 
         $this->validateReturnInfoSummary($errors);
-        
+
         // Tax Calculation Validation (Error 9138-9400+)
         $this->validateTaxCalculation($errors);
-        
+
         // CT600P Supplementary Form Validation (Error 9001-9089)
         $this->validateCT600PSupplementary($errors);
 
@@ -857,18 +1563,18 @@ class CT600 extends GovTalk
         $this->validateSupplementaryPages($errors);
     }
 
-    
+
 
     private function validateSupplementaryPages(array &$errors): void
     {
         // These validations would check if supplementary forms are present when required
         // Implementation depends on how supplementary forms are tracked in the system
-        
+
         // Error 9120-9137: Supplementary form requirements based on New return type
         if ($this->returnType === 'new') {
             $this->validateNewReturnSupplementaryRequirements($errors);
         }
-        
+
         // Error 9127: If Box 120 is completed then Box 200 must be completed
         if (!empty($this->significantEvent) && empty($this->principalBusinessActivity)) {
             $errors[] = "Error 9127: If Box 120 is completed then Box 200 must be completed";
@@ -1027,17 +1733,17 @@ class CT600 extends GovTalk
     private function validateFinancialCalculations(array &$errors): void
     {
         // Additional comprehensive financial validation rules
-        
+
         // Validate profits before deductions calculation
-        $calculatedProfitsBeforeDeductions = $this->tradingProfits + $this->nonTradingLoanProfitsAndGains + 
-                                            $this->propertyBusinessIncome + $this->nonTradingGainsIntangibles + 
-                                            $this->tonnageTaxProfits + $this->otherIncome + $this->chargeableGains;
-        
+        $calculatedProfitsBeforeDeductions = $this->tradingProfits + $this->nonTradingLoanProfitsAndGains +
+            $this->propertyBusinessIncome + $this->nonTradingGainsIntangibles +
+            $this->tonnageTaxProfits + $this->otherIncome + $this->chargeableGains;
+
         // Validate deductions don't exceed profits
-        $totalDeductions = $this->capitalAllowances + $this->managementExpenses + $this->ukPropertyBusinessLosses + 
-                          $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits + $this->nonTradingLossIntangibles + 
-                          $this->tradingLosses + $this->nonTradeCapitalAllowances;
-        
+        $totalDeductions = $this->capitalAllowances + $this->managementExpenses + $this->ukPropertyBusinessLosses +
+            $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits + $this->nonTradingLossIntangibles +
+            $this->tradingLosses + $this->nonTradeCapitalAllowances;
+
         if ($totalDeductions > $calculatedProfitsBeforeDeductions) {
             $errors[] = "Financial validation: Total deductions cannot exceed total profits before deductions";
         }
@@ -1097,10 +1803,12 @@ class CT600 extends GovTalk
         // Error 9147: NI trading profits rate requires Box 586 completion
         $niTradingTypes = ['0', '3', '4', '6', '7', '8', '9'];
         // Only validate if specifically using NI trading profits rate AND Northern Ireland is configured
-        if (in_array($this->companyType, $niTradingTypes) && 
-            isset($this->northernIreland['NItradingActivity']) && 
+        if (
+            in_array($this->companyType, $niTradingTypes) &&
+            isset($this->northernIreland['NItradingActivity']) &&
             $this->northernIreland['NItradingActivity'] === 'yes' &&
-            $this->niCorporationTaxIncluded <= 0) {
+            $this->niCorporationTaxIncluded <= 0
+        ) {
             $errors[] = "Error 9147: If CT RATE FOR NI TRADING PROFITS is used then Box 586 must be completed";
         }
     }
@@ -1109,7 +1817,7 @@ class CT600 extends GovTalk
     {
         // This section implements Error 9001-9089 for CT600P supplementary form
         // These are complex AVEC/VGEC (Audio-Visual Expenditure Credit/Video Games Expenditure Credit) calculations
-        
+
         if (!$this->ct600pPresent) {
             return; // No CT600P validation needed if form not present
         }
@@ -1121,16 +1829,16 @@ class CT600 extends GovTalk
 
         // Audio-Visual Expenditure Credit validation (Error 9015-9025)
         $this->validateAVECRules($errors);
-        
+
         // Video Games Expenditure Credit validation (Error 9021-9025)
         $this->validateVGECRules($errors);
-        
+
         // Pre-step 1 restriction validation (Error 9026-9034)
         $this->validatePreStep1Rules($errors);
-        
+
         // Step 1-6 validation (Error 9035-9084)
         $this->validateStepRules($errors);
-        
+
         // AVEC and VGEC carried forward validation (Error 9085-9089)
         $this->validateCarriedForwardRules($errors);
     }
@@ -1141,33 +1849,33 @@ class CT600 extends GovTalk
         $hasPreStep1 = $this->ct600pData['P55'] > 0 || $this->ct600pData['P60'] > 0;
         $hasStep1 = $this->ct600pData['P95'] > 0 || $this->ct600pData['P100'] > 0;
         $hasCreativeReliefs = $this->ct600pData['P30C'] > 0 || $this->ct600pData['P45C'] > 0;
-        
+
         return $hasPreStep1 || $hasStep1 || $hasCreativeReliefs;
     }
 
     private function validateAVECRules(array &$errors): void
     {
         // Error 9015: Audio-Visual section requires completion of specific boxes
-        $avecSectionPresent = $this->ct600pData['P5A'] > 0 || $this->ct600pData['P10A'] > 0 || 
-                             $this->ct600pData['P15A'] > 0 || $this->ct600pData['P20A'] > 0 || 
-                             $this->ct600pData['P25A'] > 0;
-        
-        if ($avecSectionPresent && !($this->ct600pData['P5B'] > 0 || $this->ct600pData['P10B'] > 0 || 
-                                   $this->ct600pData['P15B'] > 0 || $this->ct600pData['P20B'] > 0 || 
-                                   $this->ct600pData['P25B'] > 0)) {
+        $avecSectionPresent = $this->ct600pData['P5A'] > 0 || $this->ct600pData['P10A'] > 0 ||
+            $this->ct600pData['P15A'] > 0 || $this->ct600pData['P20A'] > 0 ||
+            $this->ct600pData['P25A'] > 0;
+
+        if ($avecSectionPresent && !($this->ct600pData['P5B'] > 0 || $this->ct600pData['P10B'] > 0 ||
+            $this->ct600pData['P15B'] > 0 || $this->ct600pData['P20B'] > 0 ||
+            $this->ct600pData['P25B'] > 0)) {
             $errors[] = "Error 9015: If the 'Audio-Visual Expenditure Credit' section is present then Boxes P5, P10, P15, P20 or P25 must be completed";
         }
 
         // Error 9016: Box P30A must equal sum of P5A, P10A, P15A, P20A, P25A
-        $expectedP30A = $this->ct600pData['P5A'] + $this->ct600pData['P10A'] + $this->ct600pData['P15A'] + 
-                       $this->ct600pData['P20A'] + $this->ct600pData['P25A'];
+        $expectedP30A = $this->ct600pData['P5A'] + $this->ct600pData['P10A'] + $this->ct600pData['P15A'] +
+            $this->ct600pData['P20A'] + $this->ct600pData['P25A'];
         if (abs($this->ct600pData['P30A'] - $expectedP30A) > 0.01) {
             $errors[] = "Error 9016: Box P30A must equal the sum of Boxes P5A, P10A, P15A, P20A and P25A";
         }
 
         // Error 9017: Box P30B must equal sum of P5B, P10B, P15B, P20B, P25B
-        $expectedP30B = $this->ct600pData['P5B'] + $this->ct600pData['P10B'] + $this->ct600pData['P15B'] + 
-                       $this->ct600pData['P20B'] + $this->ct600pData['P25B'];
+        $expectedP30B = $this->ct600pData['P5B'] + $this->ct600pData['P10B'] + $this->ct600pData['P15B'] +
+            $this->ct600pData['P20B'] + $this->ct600pData['P25B'];
         if (abs($this->ct600pData['P30B'] - $expectedP30B) > 0.01) {
             $errors[] = "Error 9017: Box P30B must equal the sum of Boxes P5B, P10B, P15B, P20B and P25B";
         }
@@ -1178,8 +1886,8 @@ class CT600 extends GovTalk
         }
 
         // Error 9019: Box P30C must equal sum of P5C, P10C, P15C, P20C, P25C
-        $expectedP30C = $this->ct600pData['P5C'] + $this->ct600pData['P10C'] + $this->ct600pData['P15C'] + 
-                       $this->ct600pData['P20C'] + $this->ct600pData['P25C'];
+        $expectedP30C = $this->ct600pData['P5C'] + $this->ct600pData['P10C'] + $this->ct600pData['P15C'] +
+            $this->ct600pData['P20C'] + $this->ct600pData['P25C'];
         if (abs($this->ct600pData['P30C'] - $expectedP30C) > 0.01) {
             $errors[] = "Error 9019: Box P30C must equal the sum of Boxes P5C, P10C, P15C, P20C and P25C";
         }
@@ -1221,7 +1929,7 @@ class CT600 extends GovTalk
     private function validatePreStep1Rules(array &$errors): void
     {
         $hasPreStep1 = $this->ct600pData['P55'] > 0 || $this->ct600pData['P60'] > 0;
-        
+
         if ($hasPreStep1) {
             // Error 9026: AVEC and VGEC carried forward section must be completed
             if ($this->ct600pData['P195'] <= 0 && $this->ct600pData['P200'] <= 0) {
@@ -1279,16 +1987,15 @@ class CT600 extends GovTalk
     {
         // Step 1 validations (Error 9035-9054)
         $this->validateStep1Rules($errors);
-        
+
         // Step 2 validations (Error 9055-9063)
         $this->validateStep2Rules($errors);
-        
     }
 
     private function validateStep1Rules(array &$errors): void
     {
         $hasStep1 = $this->ct600pData['P100'] > 0;
-        
+
         if ($hasStep1) {
             // Error 9036-9037: P75 validation with P30B
             if ($this->ct600pData['P75'] > 0 && $this->ct600pData['P30B'] <= 0) {
@@ -1335,7 +2042,7 @@ class CT600 extends GovTalk
     private function validateStep2Rules(array &$errors): void
     {
         $hasStep2 = ($this->ct600pData['P95'] - $this->ct600pData['P115']) > 0;
-        
+
         if ($hasStep2) {
             // Error 9057: Box P120 must equal Box P95 minus Box P115
             $expectedP120 = $this->ct600pData['P95'] - $this->ct600pData['P115'];
@@ -1347,12 +2054,12 @@ class CT600 extends GovTalk
         }
     }
 
-    
+
 
     private function validateCarriedForwardRules(array &$errors): void
     {
         $hasCarriedForward = $this->ct600pData['P195'] > 0 || $this->ct600pData['P200'] > 0;
-        
+
         if ($hasCarriedForward) {
             // Error 9085: Carried forward section requires Pre-step 1 or Step 2
             $hasPreStep1OrStep2 = $this->ct600pData['P55'] > 0 || $this->ct600pData['P125'] > 0;
@@ -1383,61 +2090,64 @@ class CT600 extends GovTalk
         }
     }
 
-    
+
     public function submit(): array
     {
-        $this->setMessageClass(self::MESSAGE_CLASS);
-        $this->setMessageQualifier('request');
-        $this->setMessageFunction('submit');
-        $this->setMessageCorrelationId('');
-        $this->setMessageTransformation('XML');
-        $this->addTargetOrganisation('IR');
+        try {
+            $this->setMessageClass(self::MESSAGE_CLASS);
+            $this->setMessageQualifier('request');
+            $this->setMessageFunction('submit');
+            $this->setMessageCorrelationId('');
+            $this->setMessageTransformation('XML');
+            $this->addTargetOrganisation('IR');
 
-        // Reset & re-add keys for safety - must match IRheader keys exactly
-        $this->resetMessageKeys();
-        $this->addMessageKey('UTR', $this->utr);
-        $this->addMessageKey('TaxOfficeNumber', $this->taxOfficeNumber);
-        $this->addMessageKey('TaxOfficeReference', $this->taxOfficeReference);
-
-         if ($this->vendorId !== '') {
-            $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
-        }
-        
-        // Set software metadata if provided
-        // if ($this->vendorId && $this->productName && $this->productVersion) {
-        //     $this->setSoftwareMeta($this->vendorId, $this->productName, $this->productVersion);
-        // }
-        
-        // Calculate tax values before validation to ensure accurate business rule checking
-        $this->calculateTaxValues();
-        
-        $this->validateBusinessRules();
-        $body = $this->buildBody();
-        $this->setMessageBody($body);
-        if ($this->enableSchemaValidation) {
-            $schema = $this->localSchemaPath;
-            $dom = new DOMDocument;
-            $dom->loadXML($body);
-            if (!$dom->schemaValidate($schema)) {
-                throw new \RuntimeException('Ct600 XML failed schema validation');
+            // Reset & re-add keys for safety - must match IRheader keys exactly
+            // GovTalkDetails Keys must match EmpRefs
+            $this->resetMessageKeys();
+            $this->addMessageKey('UTR', $this->employer->getCorporationTaxReference());
+            $this->addMessageKey('TaxOfficeNumber', $this->employer->getTaxOfficeNumber());
+            $this->addMessageKey('TaxOfficeReference', $this->employer->getTaxOfficeReference());
+            if ($this->vendorId !== '') {
+                $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
             }
-        }
-        if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
-            $returnable = $this->getResponseEndpoint();
-        } else {
-            $returnable = ['errors' => $this->getResponseErrors()];
-        }
-        $returnable['correlation_id'] = $this->getResponseCorrelationId();
-            
-        $returnable['request_xml'] = $this->getFullXMLRequest();
-        $returnable['response_xml'] = $this->getFullXMLResponse();
-        $returnable['qualifier'] = $this->getResponseQualifier();
-        $returnable['submission_request'] = $this->fullRequestString;
+            // Calculate tax values before validation to ensure accurate business rule checking
+            $this->calculateTaxValues();
+            $this->validateBusinessRules();
 
-        $this->logger->info($this->fullRequestString, ['ct600_message' => 'request']);
-        $this->logger->info($this->fullResponseString, ['ct600_message' => 'response']);
+            $body = $this->buildBody();
+            $this->logger->debug('CT600 XML: ' . $body);
+            $this->setMessageBody($body);
+            if ($this->enableSchemaValidation) {
+                $schema = $this->localSchemaPath;
+                $dom = new DOMDocument;
+                $dom->loadXML($body);
+                if (!$dom->schemaValidate($schema)) {
+                    throw new \RuntimeException('Ct600 XML failed schema validation');
+                }
+            }
+            if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
+                $returnable = $this->getResponseEndpoint();
+            } else {
+                $returnable = ['errors' => $this->getResponseErrors()];
+            }
+            $returnable['correlation_id'] = $this->getResponseCorrelationId();
+            $returnable['request_xml'] = $this->getFullXMLRequest();
+            $returnable['response_xml'] = $this->getFullXMLResponse();
+            $returnable['qualifier'] = $this->getResponseQualifier();
+            $returnable['submission_request'] = $this->getFullXMLRequest();
 
-        return $returnable;
+            $this->logger->info($this->getFullXMLRequest(), ['p11d_message' => 'request']);
+            $this->logger->info($this->getFullXMLResponse(), ['p11d_message' => 'response']);
+
+            return $returnable;
+        } catch (\Throwable $e) {
+            $this->logger->error('P11D submission error: ' . $e->getMessage());
+            return [
+                'errors' => [$e->getMessage()],
+                'request_xml' => $this->getFullXMLRequest() ?: null,
+                'response_xml' => $this->getFullXMLResponse() ?: null,
+            ];
+        }
     }
 
     /**
@@ -1458,7 +2168,7 @@ class CT600 extends GovTalk
         $augmentedProfits = $chargeableProfits + $this->frankedInvestmentIncome;
 
         [$financialYears, $corporationTax, $marginalRelief] = $this->computeTaxBreakdown($chargeableProfits, $augmentedProfits);
-        
+
         // Ensure marginal relief is valid
         if ($this->ringFenceProfitsIncluded == 0 && strtotime($this->periodTo) > strtotime('2023-03-31')) {
             $marginalRelief = 0;
@@ -1466,21 +2176,21 @@ class CT600 extends GovTalk
         if ($marginalRelief >= $corporationTax) {
             $marginalRelief = max(0, $corporationTax - 0.01);
         }
-        
+
         $netCorporationTaxChargeable = max(0.0, $corporationTax - $marginalRelief);
         $totalReliefsAndDeductions = $this->doubleTaxationRelief + $this->advancedCorporationTax;
         $netCorporationTaxLiability = max(0.0, $netCorporationTaxChargeable - $totalReliefsAndDeductions);
         $cfcAndBankLevyTotal = $this->cfcTaxPayable + $this->bankLevyPayable + $this->bankSurchargePayable + $this->rpdtPayable;
-        
+
         $deductedIncomeTax = $this->deductedIncomeTax;
-        
+
         // Calculate tax chargeable, repayable, and payable based on HMRC business rules
         if ($netCorporationTaxLiability > 0) {
             // Box 475 IS completed - use Error 9339, 9345, 9347 rules
             $taxChargeable = $netCorporationTaxLiability + $this->loansToParticipators + $cfcAndBankLevyTotal;
             $taxRepayable = $deductedIncomeTax - $taxChargeable;
             $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
-            
+
             // Handle schema constraint: TaxRepayable must be >= 0
             if ($taxRepayable < 0) {
                 $deductedIncomeTax = $taxChargeable;
@@ -1491,7 +2201,7 @@ class CT600 extends GovTalk
             // Box 475 is NOT completed - use Error 9344, 9346, 9348 rules
             $taxChargeable = ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal) - $totalReliefsAndDeductions;
             $taxChargeable = max(0.0, $taxChargeable);
-            
+
             if ($taxChargeable > 0) {
                 $taxRepayable = max(0.0, $deductedIncomeTax - $taxChargeable);
                 $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
@@ -1500,26 +2210,100 @@ class CT600 extends GovTalk
                 $taxPayable = 0.0;
             }
         }
-        
+
         // Update class properties with calculated values
         $this->taxChargeable = $taxChargeable;
         $this->taxRepayable = $taxRepayable;
         $this->taxPayable = $taxPayable;
         $this->deductedIncomeTax = $deductedIncomeTax;
-        
+
         // Calculate CJRS overpayments now due (Box 526) per HMRC rule 9384
         // Box 526 = (CJRSreceived + JobRetentionBonusOverpayment) - (CJRSdue + CJRSoverpaymentAlreadyAssessed)
-        if ($this->cjrsReceived !== null || $this->cjrsDue !== null || 
-            $this->cjrsOverpaymentAlreadyAssessed !== null || $this->jobRetentionBonusOverpayment !== null) {
+        if (
+            $this->cjrsReceived !== null || $this->cjrsDue !== null ||
+            $this->cjrsOverpaymentAlreadyAssessed !== null || $this->jobRetentionBonusOverpayment !== null
+        ) {
             $cjrsPositive = round(($this->cjrsReceived ?? 0) + ($this->jobRetentionBonusOverpayment ?? 0), 2);
             $cjrsNegative = round(($this->cjrsDue ?? 0) + ($this->cjrsOverpaymentAlreadyAssessed ?? 0), 2);
             $this->cjrsOverpaymentsNowDue = round($cjrsPositive - $cjrsNegative, 2);
         }
-        
+
         // Store calculated values for reference
         $this->profitsBeforeDonationsAndGroupRelief = $profitsBeforeDonationsAndGroupRelief;
         $this->corporationTax = $corporationTax;
         $this->netCorporationTaxLiability = $netCorporationTaxLiability;
+    }
+    private function writeAgent(XMLWriter $xml, AgentDetails $agent): void
+    {
+        $xml->startElement('Agent');
+
+        // Agent ID
+        if ($agent->getAgentId() !== null) {
+            $xml->writeElement('AgentID', $agent->getAgentId());
+        }
+
+        // Company name
+        if ($agent->getCompany() !== null) {
+            $xml->writeElement('Company', $agent->getCompany());
+        }
+
+        // Address
+        if ($agent->getAddress() !== null) {
+            $address = $agent->getAddress();
+            $xml->startElement('Address');
+
+            // Address lines
+            if (isset($address['Line'])) {
+                $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
+                foreach ($lines as $line) {
+                    if (!empty($line)) {
+                        $xml->writeElement('Line', $line);
+                    }
+                }
+            }
+
+            // Post Code
+            if (isset($address['PostCode']) && !empty($address['PostCode'])) {
+                $xml->writeElement('PostCode', $address['PostCode']);
+            }
+
+            // Country
+            if (isset($address['Country']) && !empty($address['Country'])) {
+                $xml->writeElement('Country', $address['Country']);
+            }
+
+            $xml->endElement(); // Address
+        }
+
+        // Contact details
+        $emails = $agent->getEmails();
+        $telephones = $agent->getTelephones();
+
+        if (!empty($emails) || !empty($telephones)) {
+            $xml->startElement('Contact');
+
+            // Emails
+            foreach ($emails as $email) {
+                if (!empty(trim($email))) {
+                    $xml->writeElement('Email', trim($email));
+                }
+            }
+
+            // Telephones
+            foreach ($telephones as $telephone) {
+                if (is_array($telephone) && isset($telephone['Number'])) {
+                    if (!empty(trim($telephone['Number']))) {
+                        $xml->startElement('Telephone');
+                        $xml->writeElement('Number', trim($telephone['Number']));
+                        $xml->endElement(); // Telephone
+                    }
+                }
+            }
+
+            $xml->endElement(); // Contact
+        }
+
+        $xml->endElement(); // Agent
     }
 
     private function buildBody(): string
@@ -1530,759 +2314,743 @@ class CT600 extends GovTalk
         $xw->startElement('IRenvelope');
         $xw->writeAttribute('xmlns', self::NS);
         $xw->startElement('IRheader');
+
         $xw->startElement('Keys');
         $xw->startElement('Key');
-        $xw->writeAttribute('Type', 'UTR');
-        $xw->text($this->utr);
-        $xw->endElement(); // Key
-        
-        $xw->startElement('Key');
         $xw->writeAttribute('Type', 'TaxOfficeNumber');
-        $xw->text($this->taxOfficeNumber);
+        $xw->text($this->employer->getTaxOfficeNumber());
         $xw->endElement();
-
         $xw->startElement('Key');
         $xw->writeAttribute('Type', 'TaxOfficeReference');
-        $xw->text($this->taxOfficeReference);
+        $xw->text($this->employer->getTaxOfficeReference());
         $xw->endElement();
-
+        if ($this->employer->getCorporationTaxReference()) {
+            $xw->startElement('Key');
+            $xw->writeAttribute('Type', 'UTR');
+            $xw->text($this->employer->getCorporationTaxReference());
+            $xw->endElement();
+        }
         $xw->endElement(); // Keys
-
         $xw->writeElement('PeriodEnd', $this->periodEnd);
+
         if ($this->principalBusinessActivity !== null) {
             $xw->startElement('Principal');
             $xw->writeElement('BusinessActivity', $this->principalBusinessActivity);
             $xw->endElement();
         }
-        if ($this->agentDetails !== null) {
-            $xw->startElement('Agent');
-            if (isset($this->agentDetails['AgentID'])) $xw->writeElement('AgentID', $this->agentDetails['AgentID']);
-            if (isset($this->agentDetails['Company'])) $xw->writeElement('Company', $this->agentDetails['Company']);
-            if (isset($this->agentDetails['Address'])) {
-                $xw->startElement('Address');
-                foreach ($this->agentDetails['Address'] as $line => $value) {
-                    if ($line === 'Country') $xw->writeElement('Country', $value);
-                    elseif ($line === 'PostCode') $xw->writeElement('PostCode', $value);
-                    else $xw->writeElement('Line', $value);
-                }
-                $xw->endElement();
-            }
-            if (isset($this->agentDetails['Contact'])) {
-                $xw->startElement('Contact');
-                if (isset($this->agentDetails['Contact']['Name'])) {
-                    $xw->startElement('Name');
-                    if (isset($this->agentDetails['Contact']['Name']['Ttl'])) $xw->writeElement('Ttl', $this->agentDetails['Contact']['Name']['Ttl']);
-                    if (isset($this->agentDetails['Contact']['Name']['Fore'])) $xw->writeElement('Fore', $this->agentDetails['Contact']['Name']['Fore']);
-                    if (isset($this->agentDetails['Contact']['Name']['Sur'])) $xw->writeElement('Sur', $this->agentDetails['Contact']['Name']['Sur']);
-                    $xw->endElement();
-                }
-                if (isset($this->agentDetails['Contact']['Email'])) $xw->writeElement('Email', $this->agentDetails['Contact']['Email']);
-                if (isset($this->agentDetails['Contact']['Telephone'])) {
-                    $xw->startElement('Telephone');
-                    $xw->writeElement('Number', $this->agentDetails['Contact']['Telephone']);
-                    $xw->endElement();
-                }
-                $xw->endElement();
-            }
-            $xw->endElement(); // Agent
+
+        // Agent information
+        if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
+            $this->writeAgent($xw, $this->agentDetails);
         }
+
+
         $xw->writeElement('DefaultCurrency', 'GBP');
-        $xw->startElement('Manifest');
-        $xw->startElement('Contains');
-        $xw->startElement('Reference');
-        $xw->writeElement('Namespace', self::NS);
-        $xw->writeElement('SchemaVersion', '2014-v1.993');
-        $xw->writeElement('TopElementName', 'CompanyTaxReturn');
-        $xw->endElement(); // Reference
-        $xw->endElement(); // Contains
-        $xw->endElement(); // Manifest
         $xw->startElement('IRmark');
         $xw->writeAttribute('Type', 'generic');
         $xw->text('IRmark+Token');
         $xw->endElement();
-        $xw->writeElement('Sender', 'Company');
+        $xw->writeElement('Sender', $this->senderType);
         $xw->endElement(); // IRheader
 
+
+        // $xw->writeElement('DefaultCurrency', 'GBP');
+        // $xw->startElement('Manifest');
+        // $xw->startElement('Contains');
+        // $xw->startElement('Reference');
+        // $xw->writeElement('Namespace', self::NS);
+        // $xw->writeElement('SchemaVersion', '2014-v1.993');
+        // $xw->writeElement('TopElementName', 'CompanyTaxReturn');
+        // $xw->endElement(); // Reference
+        // $xw->endElement(); // Contains
+        // $xw->endElement(); // Manifest
+        // $xw->startElement('IRmark');
+        // $xw->writeAttribute('Type', 'generic');
+        // $xw->text('IRmark+Token');
+        // $xw->endElement();
+        // $xw->writeElement('Sender', 'Company');
+        // $xw->endElement(); // IRheader
+
         $xw->startElement('CompanyTaxReturn');
-    $xw->writeAttribute('ReturnType', $this->returnType);
+        $xw->writeAttribute('ReturnType', $this->returnType);
 
-    $xw->startElement('CompanyInformation');
-    $xw->writeElement('CompanyName', $this->companyName);
-    $xw->writeElement('RegistrationNumber', $this->companyRegNo);
-    $xw->writeElement('Reference', $this->utr);
-    $xw->writeElement('CompanyType', $this->companyType);
-    if ($this->northernIreland !== null) {
-        $xw->startElement('NorthernIreland');
-        $xw->writeElement('NItradingActivity', $this->northernIreland['NItradingActivity'] ?? 'no');
-        $xw->writeElement('SME', $this->northernIreland['SME'] ?? 'no');
-        $xw->writeElement('NIemployer', $this->northernIreland['NIemployer'] ?? 'no');
-        $xw->writeElement('SpecialCircumstances', $this->northernIreland['SpecialCircumstances'] ?? 'no');
+        $xw->startElement('CompanyInformation');
+        $xw->writeElement('CompanyName', $this->companyName);
+        $xw->writeElement('RegistrationNumber', $this->companyRegNo);
+        $xw->writeElement('Reference', $this->utr);
+        $xw->writeElement('CompanyType', $this->companyType);
+        if ($this->northernIreland !== null) {
+            $xw->startElement('NorthernIreland');
+            $xw->writeElement('NItradingActivity', $this->northernIreland['NItradingActivity'] ?? 'no');
+            $xw->writeElement('SME', $this->northernIreland['SME'] ?? 'no');
+            $xw->writeElement('NIemployer', $this->northernIreland['NIemployer'] ?? 'no');
+            $xw->writeElement('SpecialCircumstances', $this->northernIreland['SpecialCircumstances'] ?? 'no');
+            $xw->endElement();
+        }
+        $xw->startElement('PeriodCovered');
+        $xw->writeElement('From', $this->periodFrom);
+        $xw->writeElement('To', $this->periodTo);
         $xw->endElement();
-    }
-    $xw->startElement('PeriodCovered');
-    $xw->writeElement('From', $this->periodFrom);
-    $xw->writeElement('To', $this->periodTo);
-    $xw->endElement();
-    $xw->endElement(); // CompanyInformation
+        $xw->endElement(); // CompanyInformation
 
-    $xw->startElement('ReturnInfoSummary');
-    if ($this->thisPeriod !== null) $xw->writeElement('ThisPeriod', $this->thisPeriod);
-    if ($this->earlierPeriod !== null) $xw->writeElement('EarlierPeriod', $this->earlierPeriod);
-    if ($this->multipleReturns !== null) $xw->writeElement('MultipleReturns', $this->multipleReturns);
-    if ($this->provisionalFigures !== null) $xw->writeElement('ProvisionalFigures', $this->provisionalFigures);
-    if ($this->partOfNonSmallGroup !== null) $xw->writeElement('PartOfNonSmallGroup', $this->partOfNonSmallGroup);
-    if ($this->registeredAvoidanceScheme !== null) $xw->writeElement('RegisteredAvoidanceScheme', $this->registeredAvoidanceScheme);
-    if ($this->transferPricing !== null) {
-        $xw->startElement('TransferPricing');
-        $xw->writeElement('Adjustment', $this->transferPricing['Adjustment'] ?? 'no');
-        $xw->writeElement('SME', $this->transferPricing['SME'] ?? 'no');
-        $xw->endElement();
-    }
-    
-    $xw->startElement('Accounts');
-    if (!empty($this->accountsIxbrlAttachments) || $this->accountsReason === 'PDF accounts attached with explanation') {
-        $xw->writeElement('ThisPeriodAccounts', 'yes');
-    } 
-    if ($this->accountsReason === 'PDF accounts attached with explanation') {
-        $xw->writeElement('NoAccountsReason', 'PDF accounts attached with explanation');
-    } else {
-        $xw->writeElement('NoAccountsReason', $this->accountsReason);
-    }
-    $xw->endElement();
-    
-    $xw->startElement('Computations');
-    if (!empty($this->computationsIxbrlAttachments) || empty($this->computationsReason) || $this->computationsReason === 'Other - PDF attached with explanation') {
-        $xw->writeElement('ThisPeriodComputations', 'yes');
-    } else {
-        $xw->writeElement('NoComputationsReason', $this->computationsReason);
-    }
-    $xw->endElement();
+        $xw->startElement('ReturnInfoSummary');
+        if ($this->thisPeriod !== null) $xw->writeElement('ThisPeriod', $this->thisPeriod);
+        if ($this->earlierPeriod !== null) $xw->writeElement('EarlierPeriod', $this->earlierPeriod);
+        if ($this->multipleReturns !== null) $xw->writeElement('MultipleReturns', $this->multipleReturns);
+        if ($this->provisionalFigures !== null) $xw->writeElement('ProvisionalFigures', $this->provisionalFigures);
+        if ($this->partOfNonSmallGroup !== null) $xw->writeElement('PartOfNonSmallGroup', $this->partOfNonSmallGroup);
+        if ($this->registeredAvoidanceScheme !== null) $xw->writeElement('RegisteredAvoidanceScheme', $this->registeredAvoidanceScheme);
+        if ($this->transferPricing !== null) {
+            $xw->startElement('TransferPricing');
+            $xw->writeElement('Adjustment', $this->transferPricing['Adjustment'] ?? 'no');
+            $xw->writeElement('SME', $this->transferPricing['SME'] ?? 'no');
+            $xw->endElement();
+        }
 
-    if ($this->schedules) {
-        $xw->startElement('SupplementaryPages');
-        foreach (array_keys($this->schedules) as $code) {
-            $xw->writeElement('CT600' . $code, 'yes');
+        $xw->startElement('Accounts');
+        if (!empty($this->accountsIxbrlAttachments) || $this->accountsReason === 'PDF accounts attached with explanation') {
+            $xw->writeElement('ThisPeriodAccounts', 'yes');
+        }
+        if ($this->accountsReason === 'PDF accounts attached with explanation') {
+            $xw->writeElement('NoAccountsReason', 'PDF accounts attached with explanation');
+        } else {
+            $xw->writeElement('NoAccountsReason', $this->accountsReason);
         }
         $xw->endElement();
-    }
-    if ($this->schedules || $this->ct600ePresent) {
-        $xw->startElement('SupplementaryPages');
-        foreach (array_keys($this->schedules) as $code) {
-            $xw->writeElement('CT600' . $code, 'yes');
-        }
-        if ($this->ct600ePresent) {
-            $xw->writeElement('CT600E', 'yes');
+
+        $xw->startElement('Computations');
+        if (!empty($this->computationsIxbrlAttachments) || empty($this->computationsReason) || $this->computationsReason === 'Other - PDF attached with explanation') {
+            $xw->writeElement('ThisPeriodComputations', 'yes');
+        } else {
+            $xw->writeElement('NoComputationsReason', $this->computationsReason);
         }
         $xw->endElement();
-    }
-    $xw->endElement(); // ReturnInfoSummary
 
-    $xw->startElement('Turnover');
-    $xw->writeElement('Total', $this->money($this->turnoverTotal));
-    if ($this->otherFinancialConcerns !== null) $xw->writeElement('OtherFinancialConcerns', $this->otherFinancialConcerns);
-    $xw->endElement(); // Turnover
-
-    // Calculations to avoid validation errors
-    $tradingNetProfits = max(0.0, $this->tradingProfits - $this->lossesBroughtForward);
-    $incomeSum = $tradingNetProfits + $this->nonTradingLoanProfitsAndGains + $this->nonLoanAnnuitiesAnnualPaymentsDiscounts + $this->nonUKdividends - $this->deductedIncome + $this->propertyBusinessIncome + $this->nonTradingGainsIntangibles + $this->tonnageTaxProfits + $this->otherIncome;
-    $netChargeableGains = max(0.0, $this->grossGains - $this->allowableLosses);
-    $profitsBeforeOtherDeductions = $incomeSum + $netChargeableGains - $this->lossesBroughtForwardOverall - $this->nonTradeDeficitsOnLoans;
-    $deductionsTotal = $this->unquotedShares + $this->managementExpenses + $this->ukPropertyBusinessLosses + $this->capitalAllowances + $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits + $this->nonTradingLossIntangibles + $this->tradingLosses + $this->tradingLossesCarriedForward + $this->nonTradeCapitalAllowances;
-    $profitsBeforeDonationsAndGroupRelief = max(0.0, $profitsBeforeOtherDeductions - $deductionsTotal);
-    $chargeableProfits = max(0.0, $profitsBeforeDonationsAndGroupRelief - $this->qualifyingDonations - ($this->groupRelief ?? 0) - ($this->groupReliefForCarriedForwardLosses ?? 0));
-    $augmentedProfits = $chargeableProfits + $this->frankedInvestmentIncome;
-
-    [$financialYears, $corporationTax, $marginalRelief] = $this->computeTaxBreakdown($chargeableProfits, $augmentedProfits);
-    // Ensure marginal relief is valid
-    if ($this->ringFenceProfitsIncluded == 0 && strtotime($this->periodTo) > strtotime('2023-03-31')) {
-        $marginalRelief = 0;
-    }
-    if ($marginalRelief >= $corporationTax) {
-        $marginalRelief = max(0, $corporationTax - 0.01);
-    }
-    $netCorporationTaxChargeable = max(0.0, $corporationTax - $marginalRelief);
-    $totalReliefsAndDeductions = $this->doubleTaxationRelief + $this->advancedCorporationTax;
-    $netCorporationTaxLiability = max(0.0, $netCorporationTaxChargeable - $totalReliefsAndDeductions);
-    $cfcAndBankLevyTotal = $this->cfcTaxPayable + $this->bankLevyPayable + $this->bankSurchargePayable + $this->rpdtPayable;
-    
-    $deductedIncomeTax = $this->deductedIncomeTax;
-    
-    // HMRC Business Rules implementation based on CT validation rules:
-    // Box 440 = CorporationTax, Box 470 = TotalReliefsAndDeductions, Box 475 = NetCorporationTaxLiability
-    // Box 480 = LoansToParticipators, Box 500-505 = CFC/Bank levies, Box 510 = TaxChargeable
-    // Box 515 = DeductedIncomeTax, Box 520 = TaxRepayable, Box 525 = TaxPayable
-    
-    if ($netCorporationTaxLiability > 0) {
-        // Box 475 IS completed - use Error 9339, 9345, 9347 rules
-        // Error 9339: Box 510 = Box 475 + Box 480 + Box 500 + Box 501 + Box 502 + Box 505
-        $taxChargeable = $netCorporationTaxLiability + $this->loansToParticipators + $cfcAndBankLevyTotal;
-        
-        // Error 9345: Box 520 = Box 515 - Box 510 (exact equality required)
-        $taxRepayable = $deductedIncomeTax - $taxChargeable;
-        
-        // Error 9347: Box 525 = max(0, Box 510 - Box 515)
-        $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
-        
-        // Handle schema constraint: TaxRepayable must be >= 0
-        if ($taxRepayable < 0) {
-            // Adjust DeductedIncomeTax to satisfy all constraints
-            $deductedIncomeTax = $taxChargeable;
-            $taxRepayable = 0.0;
-            $taxPayable = 0.0;
+        if ($this->schedules) {
+            $xw->startElement('SupplementaryPages');
+            foreach (array_keys($this->schedules) as $code) {
+                $xw->writeElement('CT600' . $code, 'yes');
+            }
+            $xw->endElement();
         }
-    } else {
-        // Box 475 is NOT completed - use Error 9344, 9346, 9348 rules
-        // Error 9344: Box 510 = (Box 440 + Box 480 + Box 500 + Box 501 + Box 502 + Box 505) - Box 470
-        $taxChargeable = ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal) - $totalReliefsAndDeductions;
-        $taxChargeable = max(0.0, $taxChargeable); // Cannot be negative
-        
-        if ($taxChargeable > 0) {
-            // Error 9345: Box 520 = Box 515 - Box 510 (when Box 510 is completed)
-            $taxRepayable = max(0.0, $deductedIncomeTax - $taxChargeable);
+        if ($this->schedules || $this->ct600ePresent) {
+            $xw->startElement('SupplementaryPages');
+            foreach (array_keys($this->schedules) as $code) {
+                $xw->writeElement('CT600' . $code, 'yes');
+            }
+            if ($this->ct600ePresent) {
+                $xw->writeElement('CT600E', 'yes');
+            }
+            $xw->endElement();
+        }
+        $xw->endElement(); // ReturnInfoSummary
+
+        $xw->startElement('Turnover');
+        $xw->writeElement('Total', $this->money($this->turnoverTotal));
+        if ($this->otherFinancialConcerns !== null) $xw->writeElement('OtherFinancialConcerns', $this->otherFinancialConcerns);
+        $xw->endElement(); // Turnover
+
+        // Calculations to avoid validation errors
+        $tradingNetProfits = max(0.0, $this->tradingProfits - $this->lossesBroughtForward);
+        $incomeSum = $tradingNetProfits + $this->nonTradingLoanProfitsAndGains + $this->nonLoanAnnuitiesAnnualPaymentsDiscounts + $this->nonUKdividends - $this->deductedIncome + $this->propertyBusinessIncome + $this->nonTradingGainsIntangibles + $this->tonnageTaxProfits + $this->otherIncome;
+        $netChargeableGains = max(0.0, $this->grossGains - $this->allowableLosses);
+        $profitsBeforeOtherDeductions = $incomeSum + $netChargeableGains - $this->lossesBroughtForwardOverall - $this->nonTradeDeficitsOnLoans;
+        $deductionsTotal = $this->unquotedShares + $this->managementExpenses + $this->ukPropertyBusinessLosses + $this->capitalAllowances + $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits + $this->nonTradingLossIntangibles + $this->tradingLosses + $this->tradingLossesCarriedForward + $this->nonTradeCapitalAllowances;
+        $profitsBeforeDonationsAndGroupRelief = max(0.0, $profitsBeforeOtherDeductions - $deductionsTotal);
+        $chargeableProfits = max(0.0, $profitsBeforeDonationsAndGroupRelief - $this->qualifyingDonations - ($this->groupRelief ?? 0) - ($this->groupReliefForCarriedForwardLosses ?? 0));
+        $augmentedProfits = $chargeableProfits + $this->frankedInvestmentIncome;
+
+        [$financialYears, $corporationTax, $marginalRelief] = $this->computeTaxBreakdown($chargeableProfits, $augmentedProfits);
+        // Ensure marginal relief is valid
+        if ($this->ringFenceProfitsIncluded == 0 && strtotime($this->periodTo) > strtotime('2023-03-31')) {
+            $marginalRelief = 0;
+        }
+        if ($marginalRelief >= $corporationTax) {
+            $marginalRelief = max(0, $corporationTax - 0.01);
+        }
+        $netCorporationTaxChargeable = max(0.0, $corporationTax - $marginalRelief);
+        $totalReliefsAndDeductions = $this->doubleTaxationRelief + $this->advancedCorporationTax;
+        $netCorporationTaxLiability = max(0.0, $netCorporationTaxChargeable - $totalReliefsAndDeductions);
+        $cfcAndBankLevyTotal = $this->cfcTaxPayable + $this->bankLevyPayable + $this->bankSurchargePayable + $this->rpdtPayable;
+
+        $deductedIncomeTax = $this->deductedIncomeTax;
+
+        // HMRC Business Rules implementation based on CT validation rules:
+        // Box 440 = CorporationTax, Box 470 = TotalReliefsAndDeductions, Box 475 = NetCorporationTaxLiability
+        // Box 480 = LoansToParticipators, Box 500-505 = CFC/Bank levies, Box 510 = TaxChargeable
+        // Box 515 = DeductedIncomeTax, Box 520 = TaxRepayable, Box 525 = TaxPayable
+
+        if ($netCorporationTaxLiability > 0) {
+            // Box 475 IS completed - use Error 9339, 9345, 9347 rules
+            // Error 9339: Box 510 = Box 475 + Box 480 + Box 500 + Box 501 + Box 502 + Box 505
+            $taxChargeable = $netCorporationTaxLiability + $this->loansToParticipators + $cfcAndBankLevyTotal;
+
+            // Error 9345: Box 520 = Box 515 - Box 510 (exact equality required)
+            $taxRepayable = $deductedIncomeTax - $taxChargeable;
+
             // Error 9347: Box 525 = max(0, Box 510 - Box 515)
             $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
-        } else {
-            // Box 510 is not completed - use Error 9346 rule
-            // Error 9346: Box 520 = Box 515 + Box 470 - (Box 440 + Box 480 + Box 500 + Box 505)
-            $taxRepayable = max(0.0, $deductedIncomeTax + $totalReliefsAndDeductions - ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal));
-            $taxPayable = 0.0;
-        }
-    }
-    $taxPayableIncludingRestitutionTax = $taxPayable + $this->cjrsOverpaymentsNowDue + $this->restitutionTax;
-    $effectiveRate = $chargeableProfits > 0 ? $netCorporationTaxLiability / $chargeableProfits : 0;
-    $niCorporationTaxIncluded = $this->thisPeriod === 'yes' ? $this->northernIrelandProfitsIncluded * $effectiveRate : 0;
-    $researchAndDevelopmentVaccineOrCreativeTaxCredit = $this->creativeCredit + $this->avecAndVgec; // Excluded vaccineCredit
-    $landOrLifeCredit = $this->landRemediationCredit + $this->lifeAssuranceCompanyCredit;
-    
-    // HMRC Rule 9276: TaxOutstanding = TaxPayable - (ResearchAndDevelopmentVaccineOrCreativeTaxCredit + LandOrLifeCredit + CapitalAllowancesFirstYearCredit + TaxAlreadyPaid)
-    // If result is negative, TaxOutstanding must not be completed (set to 0)
-    $netDue = $taxPayable - $researchAndDevelopmentVaccineOrCreativeTaxCredit - $landOrLifeCredit - $this->capitalAllowancesFirstYearCredit - $this->taxAlreadyPaid;
-    $taxOutstanding = $netDue > 0 ? $netDue : 0.0;
-    $taxOverpaid = $netDue < 0 ? abs($netDue) : 0.0;
 
-    $xw->startElement('CompanyTaxCalculation');
-    $xw->startElement('Income');
-    $xw->startElement('Trading');
-    $xw->writeElement('Profits', $this->wholeMoney($this->tradingProfits));
-    $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForward));
-    $xw->writeElement('NetProfits', $this->money($tradingNetProfits));
-    $xw->endElement();
-    $xw->writeElement('NonTradingLoanProfitsAndGains', $this->money($this->nonTradingLoanProfitsAndGains));
-    if ($this->incomeStatedNetFlag !== null) $xw->writeElement('IncomeStatedNet', $this->incomeStatedNetFlag);
-    $xw->writeElement('NonLoanAnnuitiesAnnualPaymentsDiscounts', $this->money($this->nonLoanAnnuitiesAnnualPaymentsDiscounts));
-    $xw->writeElement('NonUKdividends', $this->money($this->nonUKdividends));
-    $xw->writeElement('DeductedIncome', $this->money($this->deductedIncome));
-    $xw->writeElement('PropertyBusinessIncome', $this->money($this->propertyBusinessIncome));
-    $xw->writeElement('NonTradingGainsIntangibles', $this->money($this->nonTradingGainsIntangibles));
-    // Only include TonnageTaxProfits if it has a value > 0 or if it's required (Box 120 completed)
-    if ($this->tonnageTaxProfits > 0) {
-        $xw->writeElement('TonnageTaxProfits', $this->money($this->tonnageTaxProfits));
-    }
-    $xw->writeElement('OtherIncome', $this->money($this->otherIncome));
-    $xw->endElement(); // Income
-    $xw->startElement('ChargeableGains');
-    $xw->writeElement('GrossGains', $this->money($this->grossGains));
-    // Only include AllowableLosses if GrossGains > 0 (HMRC rule 9158)
-    if ($this->grossGains > 0) {
-        $xw->writeElement('AllowableLosses', $this->money($this->allowableLosses));
-    }
-    $xw->writeElement('NetChargeableGains', $this->money($netChargeableGains));
-    $xw->endElement();
-    $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForwardOverall));
-    $xw->writeElement('NonTradeDeficitsOnLoans', $this->money($this->nonTradeDeficitsOnLoans));
-    $xw->writeElement('ProfitsBeforeOtherDeductions', $this->wholeMoney($profitsBeforeOtherDeductions));
-    $xw->startElement('DeductionsAndReliefs');
-    $xw->writeElement('UnquotedShares', $this->money($this->unquotedShares));
-    $xw->writeElement('ManagementExpenses', $this->money($this->managementExpenses));
-    $xw->writeElement('UKpropertyBusinessLosses', $this->money($this->ukPropertyBusinessLosses));
-    $xw->writeElement('CapitalAllowances', $this->money($this->capitalAllowances));
-    $xw->writeElement('NonTradeDeficits', $this->money($this->nonTradeDeficits));
-    $xw->writeElement('CarriedForwardNonTradeDeficits', $this->money($this->carriedForwardNonTradeDeficits));
-    $xw->writeElement('NonTradingLossIntangibles', $this->money($this->nonTradingLossIntangibles));
-    $xw->writeElement('TradingLosses', $this->money($this->tradingLosses));
-    if ($this->tradingLosses > 0 && $this->hasTradingLossesCarriedBack !== null) {
-        $xw->writeElement('TradingLossesCarriedBack', $this->hasTradingLossesCarriedBack ? 'yes' : 'no');
-    }
-    $xw->writeElement('TradingLossesCarriedForward', $this->money($this->tradingLossesCarriedForward));
-    $xw->writeElement('NonTradeCapitalAllowances', $this->money($this->nonTradeCapitalAllowances));
-    $xw->writeElement('Total', $this->money($deductionsTotal));
-    $xw->endElement();
-    $xw->startElement('ChargesAndReliefs');
-    $xw->writeElement('ProfitsBeforeDonationsAndGroupRelief', $this->wholeMoney($profitsBeforeDonationsAndGroupRelief));
-    $xw->writeElement('QualifyingDonations', $this->money($this->qualifyingDonations));
-    // Only include Group Relief if there are actual group companies (Box 105 completed) or return type is Amended
-    if (($this->groupRelief ?? 0) > 0 || $this->returnType === 1) {
-        $xw->writeElement('GroupRelief', $this->money($this->groupRelief ?? 0.00));
-    }
-    if (($this->groupReliefForCarriedForwardLosses ?? 0) > 0 || $this->returnType === 1) {
-        $xw->writeElement('GroupReliefForCarriedForwardLosses', $this->money($this->groupReliefForCarriedForwardLosses ?? 0));
-    }
-    $xw->endElement();
-    $xw->writeElement('ChargeableProfits', $this->money($chargeableProfits));
-    // Only include RingFenceProfitsIncluded if there are actual ring fence profits (Box 135) or return type is Amended
-    if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
-        $xw->writeElement('RingFenceProfitsIncluded', $this->money($this->ringFenceProfitsIncluded));
-    }
-    if ($this->thisPeriod === 'yes') {
-        $xw->writeElement('NorthernIrelandProfitsIncluded', $this->money($this->northernIrelandProfitsIncluded));
-    }
-    $xw->startElement('CorporationTaxChargeable');
-    if ($this->associatedCompanies !== null) {
-        $xw->startElement('AssociatedCompanies');
-        $xw->writeElement('ThisPeriod', (string) $this->associatedCompanies);
-        // HMRC Rule 9397: Boxes 327 and 328 must NOT be completed if Box 326 is completed
-        // Since ThisPeriod (Box 326) is set, we must NOT include AssociatedCompaniesFinancialYears
-        // if ($this->associatedCompaniesFinancialYears !== null) {
-        //     $xw->startElement('AssociatedCompaniesFinancialYears');
-        //     $xw->writeElement('FirstYear', (string) ($this->associatedCompaniesFinancialYears['firstYear'] ?? 0));
-        //     $xw->writeElement('SecondYear', (string) ($this->associatedCompaniesFinancialYears['secondYear'] ?? 0));
-        //     $xw->endElement();
-        // }
-        // Only include StartingOrSmallCompaniesRate when true (schema only allows 'yes')
-        if ($this->startingOrSmallCompaniesRate) {
-            $xw->writeElement('StartingOrSmallCompaniesRate', 'yes');
+            // Handle schema constraint: TaxRepayable must be >= 0
+            if ($taxRepayable < 0) {
+                // Adjust DeductedIncomeTax to satisfy all constraints
+                $deductedIncomeTax = $taxChargeable;
+                $taxRepayable = 0.0;
+                $taxPayable = 0.0;
+            }
+        } else {
+            // Box 475 is NOT completed - use Error 9344, 9346, 9348 rules
+            // Error 9344: Box 510 = (Box 440 + Box 480 + Box 500 + Box 501 + Box 502 + Box 505) - Box 470
+            $taxChargeable = ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal) - $totalReliefsAndDeductions;
+            $taxChargeable = max(0.0, $taxChargeable); // Cannot be negative
+
+            if ($taxChargeable > 0) {
+                // Error 9345: Box 520 = Box 515 - Box 510 (when Box 510 is completed)
+                $taxRepayable = max(0.0, $deductedIncomeTax - $taxChargeable);
+                // Error 9347: Box 525 = max(0, Box 510 - Box 515)
+                $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
+            } else {
+                // Box 510 is not completed - use Error 9346 rule
+                // Error 9346: Box 520 = Box 515 + Box 470 - (Box 440 + Box 480 + Box 500 + Box 505)
+                $taxRepayable = max(0.0, $deductedIncomeTax + $totalReliefsAndDeductions - ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal));
+                $taxPayable = 0.0;
+            }
+        }
+        $taxPayableIncludingRestitutionTax = $taxPayable + $this->cjrsOverpaymentsNowDue + $this->restitutionTax;
+        $effectiveRate = $chargeableProfits > 0 ? $netCorporationTaxLiability / $chargeableProfits : 0;
+        $niCorporationTaxIncluded = $this->thisPeriod === 'yes' ? $this->northernIrelandProfitsIncluded * $effectiveRate : 0;
+        $researchAndDevelopmentVaccineOrCreativeTaxCredit = $this->creativeCredit + $this->avecAndVgec; // Excluded vaccineCredit
+        $landOrLifeCredit = $this->landRemediationCredit + $this->lifeAssuranceCompanyCredit;
+
+        // HMRC Rule 9276: TaxOutstanding = TaxPayable - (ResearchAndDevelopmentVaccineOrCreativeTaxCredit + LandOrLifeCredit + CapitalAllowancesFirstYearCredit + TaxAlreadyPaid)
+        // If result is negative, TaxOutstanding must not be completed (set to 0)
+        $netDue = $taxPayable - $researchAndDevelopmentVaccineOrCreativeTaxCredit - $landOrLifeCredit - $this->capitalAllowancesFirstYearCredit - $this->taxAlreadyPaid;
+        $taxOutstanding = $netDue > 0 ? $netDue : 0.0;
+        $taxOverpaid = $netDue < 0 ? abs($netDue) : 0.0;
+
+        $xw->startElement('CompanyTaxCalculation');
+        $xw->startElement('Income');
+        $xw->startElement('Trading');
+        $xw->writeElement('Profits', $this->wholeMoney($this->tradingProfits));
+        $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForward));
+        $xw->writeElement('NetProfits', $this->money($tradingNetProfits));
+        $xw->endElement();
+        $xw->writeElement('NonTradingLoanProfitsAndGains', $this->money($this->nonTradingLoanProfitsAndGains));
+        if ($this->incomeStatedNetFlag !== null) $xw->writeElement('IncomeStatedNet', $this->incomeStatedNetFlag);
+        $xw->writeElement('NonLoanAnnuitiesAnnualPaymentsDiscounts', $this->money($this->nonLoanAnnuitiesAnnualPaymentsDiscounts));
+        $xw->writeElement('NonUKdividends', $this->money($this->nonUKdividends));
+        $xw->writeElement('DeductedIncome', $this->money($this->deductedIncome));
+        $xw->writeElement('PropertyBusinessIncome', $this->money($this->propertyBusinessIncome));
+        $xw->writeElement('NonTradingGainsIntangibles', $this->money($this->nonTradingGainsIntangibles));
+        // Only include TonnageTaxProfits if it has a value > 0 or if it's required (Box 120 completed)
+        if ($this->tonnageTaxProfits > 0) {
+            $xw->writeElement('TonnageTaxProfits', $this->money($this->tonnageTaxProfits));
+        }
+        $xw->writeElement('OtherIncome', $this->money($this->otherIncome));
+        $xw->endElement(); // Income
+        $xw->startElement('ChargeableGains');
+        $xw->writeElement('GrossGains', $this->money($this->grossGains));
+        // Only include AllowableLosses if GrossGains > 0 (HMRC rule 9158)
+        if ($this->grossGains > 0) {
+            $xw->writeElement('AllowableLosses', $this->money($this->allowableLosses));
+        }
+        $xw->writeElement('NetChargeableGains', $this->money($netChargeableGains));
+        $xw->endElement();
+        $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForwardOverall));
+        $xw->writeElement('NonTradeDeficitsOnLoans', $this->money($this->nonTradeDeficitsOnLoans));
+        $xw->writeElement('ProfitsBeforeOtherDeductions', $this->wholeMoney($profitsBeforeOtherDeductions));
+        $xw->startElement('DeductionsAndReliefs');
+        $xw->writeElement('UnquotedShares', $this->money($this->unquotedShares));
+        $xw->writeElement('ManagementExpenses', $this->money($this->managementExpenses));
+        $xw->writeElement('UKpropertyBusinessLosses', $this->money($this->ukPropertyBusinessLosses));
+        $xw->writeElement('CapitalAllowances', $this->money($this->capitalAllowances));
+        $xw->writeElement('NonTradeDeficits', $this->money($this->nonTradeDeficits));
+        $xw->writeElement('CarriedForwardNonTradeDeficits', $this->money($this->carriedForwardNonTradeDeficits));
+        $xw->writeElement('NonTradingLossIntangibles', $this->money($this->nonTradingLossIntangibles));
+        $xw->writeElement('TradingLosses', $this->money($this->tradingLosses));
+        if ($this->tradingLosses > 0 && $this->hasTradingLossesCarriedBack !== null) {
+            $xw->writeElement('TradingLossesCarriedBack', $this->hasTradingLossesCarriedBack ? 'yes' : 'no');
+        }
+        $xw->writeElement('TradingLossesCarriedForward', $this->money($this->tradingLossesCarriedForward));
+        $xw->writeElement('NonTradeCapitalAllowances', $this->money($this->nonTradeCapitalAllowances));
+        $xw->writeElement('Total', $this->money($deductionsTotal));
+        $xw->endElement();
+        $xw->startElement('ChargesAndReliefs');
+        $xw->writeElement('ProfitsBeforeDonationsAndGroupRelief', $this->wholeMoney($profitsBeforeDonationsAndGroupRelief));
+        $xw->writeElement('QualifyingDonations', $this->money($this->qualifyingDonations));
+        // Only include Group Relief if there are actual group companies (Box 105 completed) or return type is Amended
+        if (($this->groupRelief ?? 0) > 0 || $this->returnType === 1) {
+            $xw->writeElement('GroupRelief', $this->money($this->groupRelief ?? 0.00));
+        }
+        if (($this->groupReliefForCarriedForwardLosses ?? 0) > 0 || $this->returnType === 1) {
+            $xw->writeElement('GroupReliefForCarriedForwardLosses', $this->money($this->groupReliefForCarriedForwardLosses ?? 0));
         }
         $xw->endElement();
-    }
-    $fyCount = 0;
-    foreach ($financialYears as $fy) {
-        $fyCount++;
-        $tag = ($fyCount === 1) ? 'FinancialYearOne' : 'FinancialYearTwo';
-        $xw->startElement($tag);
-        $xw->writeElement('Year', (string) $fy['year']);
-        foreach ($fy['details'] as $detail) {
-            $xw->startElement('Details');
-            $xw->writeElement('Profit', $this->wholeMoney($detail['profit']));
-            $xw->writeElement('TaxRate', $this->money($detail['rate']));
-            // Ensure Tax (Box 395) exactly equals Profit (Box 385) multiplied by Rate (Box 390)
-            $tax = $this->wholeMoney($detail['profit']) * ($this->wholeMoney($detail['rate']) / 100);
-            $xw->writeElement('Tax', $this->money($tax));
+        $xw->writeElement('ChargeableProfits', $this->money($chargeableProfits));
+        // Only include RingFenceProfitsIncluded if there are actual ring fence profits (Box 135) or return type is Amended
+        if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+            $xw->writeElement('RingFenceProfitsIncluded', $this->money($this->ringFenceProfitsIncluded));
+        }
+        if ($this->thisPeriod === 'yes') {
+            $xw->writeElement('NorthernIrelandProfitsIncluded', $this->money($this->northernIrelandProfitsIncluded));
+        }
+        $xw->startElement('CorporationTaxChargeable');
+        if ($this->associatedCompanies !== null) {
+            $xw->startElement('AssociatedCompanies');
+            $xw->writeElement('ThisPeriod', (string) $this->associatedCompanies);
+            // HMRC Rule 9397: Boxes 327 and 328 must NOT be completed if Box 326 is completed
+            // Since ThisPeriod (Box 326) is set, we must NOT include AssociatedCompaniesFinancialYears
+            // if ($this->associatedCompaniesFinancialYears !== null) {
+            //     $xw->startElement('AssociatedCompaniesFinancialYears');
+            //     $xw->writeElement('FirstYear', (string) ($this->associatedCompaniesFinancialYears['firstYear'] ?? 0));
+            //     $xw->writeElement('SecondYear', (string) ($this->associatedCompaniesFinancialYears['secondYear'] ?? 0));
+            //     $xw->endElement();
+            // }
+            // Only include StartingOrSmallCompaniesRate when true (schema only allows 'yes')
+            if ($this->startingOrSmallCompaniesRate) {
+                $xw->writeElement('StartingOrSmallCompaniesRate', 'yes');
+            }
             $xw->endElement();
         }
-        $xw->endElement();
-    }
-    $xw->endElement(); // CorporationTaxChargeable
-    $xw->writeElement('CorporationTax', $this->money($corporationTax));
-    if ($this->ringFenceProfitsIncluded > 0 || strtotime($this->periodTo) <= strtotime('2023-03-31')) {
-        $xw->writeElement('MarginalReliefForRingFenceTrades', $this->money($marginalRelief));
-    }
-    $xw->writeElement('NetCorporationTaxChargeable', $this->money($netCorporationTaxChargeable));
-    $xw->startElement('TaxReliefsAndDeductions');
-    $xw->writeElement('CommunityInvestmentRelief', $this->money($this->communityInvestmentRelief ?? 0.0));
-    if ($this->doubleTaxationRelief > 0 || $this->underlyingRate !== null || $this->amountCarriedBack !== null) {
-        $xw->startElement('DoubleTaxation');
-        if ($this->doubleTaxationRelief > 0) {
-            $xw->writeElement('DoubleTaxationRelief', $this->money($this->doubleTaxationRelief));
+        $fyCount = 0;
+        foreach ($financialYears as $fy) {
+            $fyCount++;
+            $tag = ($fyCount === 1) ? 'FinancialYearOne' : 'FinancialYearTwo';
+            $xw->startElement($tag);
+            $xw->writeElement('Year', (string) $fy['year']);
+            foreach ($fy['details'] as $detail) {
+                $xw->startElement('Details');
+                $xw->writeElement('Profit', $this->wholeMoney($detail['profit']));
+                $xw->writeElement('TaxRate', $this->money($detail['rate']));
+                // Ensure Tax (Box 395) exactly equals Profit (Box 385) multiplied by Rate (Box 390)
+                $tax = $this->wholeMoney($detail['profit']) * ($this->wholeMoney($detail['rate']) / 100);
+                $xw->writeElement('Tax', $this->money($tax));
+                $xw->endElement();
+            }
+            $xw->endElement();
         }
-        if ($this->underlyingRate !== null) $xw->writeElement('UnderlyingRate', $this->underlyingRate);
-        if ($this->amountCarriedBack !== null) $xw->writeElement('AmountCarriedBack', $this->amountCarriedBack);
+        $xw->endElement(); // CorporationTaxChargeable
+        $xw->writeElement('CorporationTax', $this->money($corporationTax));
+        if ($this->ringFenceProfitsIncluded > 0 || strtotime($this->periodTo) <= strtotime('2023-03-31')) {
+            $xw->writeElement('MarginalReliefForRingFenceTrades', $this->money($marginalRelief));
+        }
+        $xw->writeElement('NetCorporationTaxChargeable', $this->money($netCorporationTaxChargeable));
+        $xw->startElement('TaxReliefsAndDeductions');
+        $xw->writeElement('CommunityInvestmentRelief', $this->money($this->communityInvestmentRelief ?? 0.0));
+        if ($this->doubleTaxationRelief > 0 || $this->underlyingRate !== null || $this->amountCarriedBack !== null) {
+            $xw->startElement('DoubleTaxation');
+            if ($this->doubleTaxationRelief > 0) {
+                $xw->writeElement('DoubleTaxationRelief', $this->money($this->doubleTaxationRelief));
+            }
+            if ($this->underlyingRate !== null) $xw->writeElement('UnderlyingRate', $this->underlyingRate);
+            if ($this->amountCarriedBack !== null) $xw->writeElement('AmountCarriedBack', $this->amountCarriedBack);
+            $xw->endElement();
+        }
+        $xw->writeElement('AdvancedCorporationTax', $this->money($this->advancedCorporationTax));
+        $xw->writeElement('TotalReliefsAndDeductions', $this->money($totalReliefsAndDeductions));
         $xw->endElement();
-    }
-    $xw->writeElement('AdvancedCorporationTax', $this->money($this->advancedCorporationTax));
-    $xw->writeElement('TotalReliefsAndDeductions', $this->money($totalReliefsAndDeductions));
-    $xw->endElement();
-    $xw->startElement('CJRS');
-    $xw->writeElement('CJRSreceived', $this->money($this->cjrsReceived));
-    $xw->writeElement('CJRSdue', $this->money($this->cjrsDue));
-    $xw->writeElement('CJRSoverpaymentAlreadyAssessed', $this->money($this->cjrsOverpaymentAlreadyAssessed));
-    $xw->writeElement('JobRetentionBonusOverpayment', $this->money($this->jobRetentionBonusOverpayment));
-    $xw->endElement();
-    $xw->endElement(); // CompanyTaxCalculation
-
-    $xw->startElement('EnergyProfitsLevy');
-    $xw->writeElement('EOGPLamounts', $this->money($this->eogplAmounts));
-    $xw->writeElement('EGLamounts', $this->money($this->eglAmounts));
-    $xw->endElement();
-
-    $xw->startElement('CalculationOfTaxOutstandingOrOverpaid');
-    $xw->writeElement('NetCorporationTaxLiability', $this->money($netCorporationTaxLiability));
-    if ($this->loansToParticipators > 0) { // Only include if non-zero
-        $xw->writeElement('LoansToParticipators', $this->money($this->loansToParticipators));
-    }
-    if ($this->ct600aReliefDue !== null) $xw->writeElement('CT600AreliefDue', $this->ct600aReliefDue);
-    // Only include CFC tax payable if there are CFC companies (Box 100 completed) or return type is Amended
-    if ($this->cfcTaxPayable > 0 || $this->returnType === 1) {
-        $xw->writeElement('CFCtaxPayable', $this->money($this->cfcTaxPayable));
-    }
-    $xw->writeElement('BankLevyPayable', $this->money($this->bankLevyPayable));
-    $xw->writeElement('BankSurchargePayable', $this->money($this->bankSurchargePayable));
-    $xw->writeElement('RPDTpayable', $this->money($this->rpdtPayable));
-    $xw->writeElement('CFCandBankLevyTotal', $this->money($cfcAndBankLevyTotal));
-    $xw->writeElement('EOGPLpayable', $this->money($this->eogplPayable));
-    $xw->writeElement('EGLpayable', $this->money($this->eglPayable));
-    // Only include SupplementaryCharge if there are ring fence profits (Box 135) or return type is Amended
-    if ($this->supplementaryCharge > 0 || $this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
-        $xw->writeElement('SupplementaryCharge', $this->money($this->supplementaryCharge));
-    }
-    $xw->writeElement('TaxChargeable', $this->money($taxChargeable));
-    $xw->startElement('IncomeTax');
-    $xw->writeElement('DeductedIncomeTax', $this->money($this->deductedIncomeTax));
-    $xw->writeElement('TaxRepayable', $this->money($taxRepayable));
-    $xw->endElement();
-    $xw->writeElement('TaxPayable', $this->money($taxPayable));
-    $xw->writeElement('CJRSoverpaymentsNowDue', $this->money($this->cjrsOverpaymentsNowDue));
-    if ($this->restitutionTax > 0) {
-        $xw->writeElement('RestitutionTax', $this->money($this->restitutionTax));
-    }
-    $xw->writeElement('TaxPayableIncludingRestitutionTax', $this->money($taxPayableIncludingRestitutionTax));
-    $xw->endElement();
-
-    $xw->startElement('TaxReconciliation');
-    if ($this->registeredAvoidanceScheme === 'yes' && $this->researchAndDevelopmentCredit > 0) {
-        $xw->writeElement('ResearchAndDevelopmentCredit', $this->money($this->researchAndDevelopmentCredit));
-    }
-    if ($this->creativeCredit > 0) {
-        $xw->writeElement('CreativeCredit', $this->money($this->creativeCredit));
-    }
-    if ($this->avecAndVgec > 0) {
-        $xw->writeElement('AVECandVGEC', $this->money($this->avecAndVgec));
-    }
-    $xw->writeElement('ResearchAndDevelopmentVaccineOrCreativeTaxCredit', $this->money($researchAndDevelopmentVaccineOrCreativeTaxCredit));
-    if ($this->landRemediationCredit > 0) {
-        $xw->writeElement('LandRemediationCredit', $this->money($this->landRemediationCredit));
-    }
-    if ($this->lifeAssuranceCompanyCredit > 0) {
-        $xw->writeElement('LifeAssuranceCompanyCredit', $this->money($this->lifeAssuranceCompanyCredit));
-    }
-    $xw->writeElement('LandOrLifeCredit', $this->money($landOrLifeCredit));
-    // Only include Ring Fence elements if there are ring fence profits (Box 135) or return type is Amended
-    if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
-        $xw->writeElement('RingFenceCorpTaxIncluded', $this->money($this->ringFenceCorpTaxIncluded));
-    }
-    if ($this->thisPeriod === 'yes') {
-        $xw->writeElement('NIcorporationTaxIncluded', $this->money($niCorporationTaxIncluded));
-    }
-    // Only include Ring Fence Supplementary Charge if there are ring fence profits (Box 135) or return type is Amended
-    if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
-        $xw->writeElement('RingFenceSupplementaryChargeIncluded', $this->money($this->ringFenceSupplementaryChargeIncluded));
-    }
-    $xw->writeElement('TaxAlreadyPaid', $this->money($this->taxAlreadyPaid));
-    $xw->startElement('TaxOutstandingOrOverpaid');
-    if ($taxOutstanding > 0) {
-        $xw->writeElement('TaxOutstanding', $this->money($taxOutstanding));
-    }
-    if ($taxOverpaid > 0) {
-        $xw->writeElement('TaxOverpaid', $this->money($taxOverpaid));
-    }
-    $xw->endElement();
-    $xw->writeElement('RefundsSurrendered', $this->money($this->refundsSurrendered));
-    $xw->writeElement('AVECVGECsurrenderedToThisCompany', $this->money($this->avecVgecSurrenderedToThisCompany));
-    $xw->writeElement('RandDExpenditureCreditsSurrendered', $this->money($this->randDExpenditureCreditsSurrendered));
-    if ($this->goodsExported === 'yes' || $this->servicesExported === 'yes' || $this->neitherGoodsNorServicesExported === 'yes') {
-        $xw->startElement('ExporterInformation');
-        if ($this->goodsExported !== null) $xw->writeElement('GoodsExported', $this->goodsExported);
-        if ($this->servicesExported !== null) $xw->writeElement('ServicesExported', $this->servicesExported);
-        if ($this->neitherGoodsNorServicesExported !== null) $xw->writeElement('NeitherGoodsNorServicesExported', $this->neitherGoodsNorServicesExported);
+        $xw->startElement('CJRS');
+        $xw->writeElement('CJRSreceived', $this->money($this->cjrsReceived));
+        $xw->writeElement('CJRSdue', $this->money($this->cjrsDue));
+        $xw->writeElement('CJRSoverpaymentAlreadyAssessed', $this->money($this->cjrsOverpaymentAlreadyAssessed));
+        $xw->writeElement('JobRetentionBonusOverpayment', $this->money($this->jobRetentionBonusOverpayment));
         $xw->endElement();
-    }
-    $xw->endElement(); // TaxReconciliation
+        $xw->endElement(); // CompanyTaxCalculation
 
-    $xw->startElement('IndicatorsAndInformation');
-    $xw->writeElement('FrankedInvestmentIncome', $this->money($this->frankedInvestmentIncome));
-    if (strtotime($this->periodTo) <= strtotime('2023-03-31')) {
-        $xw->writeElement('NumberOf51groupCompanies', (string) $this->numberOf51groupCompanies);
-    }
-    if ($this->instalmentPayments !== null) $xw->writeElement('InstalmentPayments', $this->instalmentPayments);
-    if ($this->veryLargeQIPs !== null) $xw->writeElement('VeryLargeQIPs', $this->veryLargeQIPs);
-    if ($this->groupPayment !== null) $xw->writeElement('GroupPayment', $this->groupPayment);
-    if ($this->intangibleAssets !== null) $xw->writeElement('IntangibleAssets', $this->intangibleAssets);
-    if ($this->crossBorderRoyalty !== null) $xw->writeElement('CrossBorderRoyalty', $this->crossBorderRoyalty);
-    $xw->writeElement('EatOutToHelpOutScheme', $this->money($this->eatOutToHelpOutScheme));
-    $xw->endElement();
+        $xw->startElement('EnergyProfitsLevy');
+        $xw->writeElement('EOGPLamounts', $this->money($this->eogplAmounts));
+        $xw->writeElement('EGLamounts', $this->money($this->eglAmounts));
+        $xw->endElement();
 
-    if ($this->researchAndDevelopmentCredit > 0 || $this->creativeCredit > 0) {
-        $xw->startElement('EnhancedExpenditure');
-        if ($this->smeClaim !== null) $xw->writeElement('SMEclaim', $this->smeClaim);
-        if ($this->rAndDIntensiveSMEclaim !== null) $xw->writeElement('RAndDIntensiveSMEclaim', $this->rAndDIntensiveSMEclaim);
-        if ($this->largeCompanyClaim !== null) $xw->writeElement('LargeCompanyClaim', $this->largeCompanyClaim);
-        if ($this->rAndDClaimNotificationForm !== null) $xw->writeElement('RAndDClaimNotificationForm', $this->rAndDClaimNotificationForm);
-        if ($this->additionalRAndDForm !== null) $xw->writeElement('AdditionalRAndDForm', $this->additionalRAndDForm);
-        if ($this->additionalCreativesForm !== null) $xw->writeElement('AdditionalCreativesForm', $this->additionalCreativesForm);
-        if ($this->researchAndDevelopmentCredit > 0 && strtotime($this->periodFrom) < strtotime('2024-04-01')) {
-            $xw->writeElement('RAndDExpenditureSME', $this->money($this->rAndDExpenditureSME));
-            $xw->writeElement('RandDEnhancedExpenditure', $this->money($this->randDEnhancedExpenditure));
+        $xw->startElement('CalculationOfTaxOutstandingOrOverpaid');
+        $xw->writeElement('NetCorporationTaxLiability', $this->money($netCorporationTaxLiability));
+        if ($this->loansToParticipators > 0) { // Only include if non-zero
+            $xw->writeElement('LoansToParticipators', $this->money($this->loansToParticipators));
+        }
+        if ($this->ct600aReliefDue !== null) $xw->writeElement('CT600AreliefDue', $this->ct600aReliefDue);
+        // Only include CFC tax payable if there are CFC companies (Box 100 completed) or return type is Amended
+        if ($this->cfcTaxPayable > 0 || $this->returnType === 1) {
+            $xw->writeElement('CFCtaxPayable', $this->money($this->cfcTaxPayable));
+        }
+        $xw->writeElement('BankLevyPayable', $this->money($this->bankLevyPayable));
+        $xw->writeElement('BankSurchargePayable', $this->money($this->bankSurchargePayable));
+        $xw->writeElement('RPDTpayable', $this->money($this->rpdtPayable));
+        $xw->writeElement('CFCandBankLevyTotal', $this->money($cfcAndBankLevyTotal));
+        $xw->writeElement('EOGPLpayable', $this->money($this->eogplPayable));
+        $xw->writeElement('EGLpayable', $this->money($this->eglPayable));
+        // Only include SupplementaryCharge if there are ring fence profits (Box 135) or return type is Amended
+        if ($this->supplementaryCharge > 0 || $this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+            $xw->writeElement('SupplementaryCharge', $this->money($this->supplementaryCharge));
+        }
+        $xw->writeElement('TaxChargeable', $this->money($taxChargeable));
+        $xw->startElement('IncomeTax');
+        $xw->writeElement('DeductedIncomeTax', $this->money($this->deductedIncomeTax));
+        $xw->writeElement('TaxRepayable', $this->money($taxRepayable));
+        $xw->endElement();
+        $xw->writeElement('TaxPayable', $this->money($taxPayable));
+        $xw->writeElement('CJRSoverpaymentsNowDue', $this->money($this->cjrsOverpaymentsNowDue));
+        if ($this->restitutionTax > 0) {
+            $xw->writeElement('RestitutionTax', $this->money($this->restitutionTax));
+        }
+        $xw->writeElement('TaxPayableIncludingRestitutionTax', $this->money($taxPayableIncludingRestitutionTax));
+        $xw->endElement();
+
+        $xw->startElement('TaxReconciliation');
+        if ($this->registeredAvoidanceScheme === 'yes' && $this->researchAndDevelopmentCredit > 0) {
+            $xw->writeElement('ResearchAndDevelopmentCredit', $this->money($this->researchAndDevelopmentCredit));
         }
         if ($this->creativeCredit > 0) {
-            $xw->writeElement('CreativesCoreExpenditure', $this->money($this->creativesCoreExpenditure));
-            $xw->writeElement('CreativeEnhancedExpenditure', $this->money($this->creativeEnhancedExpenditure));
+            $xw->writeElement('CreativeCredit', $this->money($this->creativeCredit));
         }
-        $xw->writeElement('RandDAndCreativeEnhancedExpenditure', $this->money($this->randDEnhancedExpenditure + $this->creativeEnhancedExpenditure));
+        if ($this->avecAndVgec > 0) {
+            $xw->writeElement('AVECandVGEC', $this->money($this->avecAndVgec));
+        }
+        $xw->writeElement('ResearchAndDevelopmentVaccineOrCreativeTaxCredit', $this->money($researchAndDevelopmentVaccineOrCreativeTaxCredit));
+        if ($this->landRemediationCredit > 0) {
+            $xw->writeElement('LandRemediationCredit', $this->money($this->landRemediationCredit));
+        }
+        if ($this->lifeAssuranceCompanyCredit > 0) {
+            $xw->writeElement('LifeAssuranceCompanyCredit', $this->money($this->lifeAssuranceCompanyCredit));
+        }
+        $xw->writeElement('LandOrLifeCredit', $this->money($landOrLifeCredit));
+        // Only include Ring Fence elements if there are ring fence profits (Box 135) or return type is Amended
+        if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+            $xw->writeElement('RingFenceCorpTaxIncluded', $this->money($this->ringFenceCorpTaxIncluded));
+        }
+        if ($this->thisPeriod === 'yes') {
+            $xw->writeElement('NIcorporationTaxIncluded', $this->money($niCorporationTaxIncluded));
+        }
+        // Only include Ring Fence Supplementary Charge if there are ring fence profits (Box 135) or return type is Amended
+        if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
+            $xw->writeElement('RingFenceSupplementaryChargeIncluded', $this->money($this->ringFenceSupplementaryChargeIncluded));
+        }
+        $xw->writeElement('TaxAlreadyPaid', $this->money($this->taxAlreadyPaid));
+        $xw->startElement('TaxOutstandingOrOverpaid');
+        if ($taxOutstanding > 0) {
+            $xw->writeElement('TaxOutstanding', $this->money($taxOutstanding));
+        }
+        if ($taxOverpaid > 0) {
+            $xw->writeElement('TaxOverpaid', $this->money($taxOverpaid));
+        }
         $xw->endElement();
-    }
-
-    $xw->writeElement('LandRemediationEnhancedExpenditure', $this->money($this->landRemediationEnhancedExpenditure));
-
-    if ($this->allowancesAndCharges !== null) {
-        $xw->startElement('AllowancesAndCharges');
-        if (isset($this->allowancesAndCharges['FullExpensing'])) {
-            $xw->startElement('FullExpensing');
-            $xw->writeElement('BalancingCharges', $this->money($this->allowancesAndCharges['FullExpensing']['BalancingCharges'] ?? 0));
-            $xw->writeElement('CapitalAllowances', $this->money($this->allowancesAndCharges['FullExpensing']['CapitalAllowances'] ?? 0));
+        $xw->writeElement('RefundsSurrendered', $this->money($this->refundsSurrendered));
+        $xw->writeElement('AVECVGECsurrenderedToThisCompany', $this->money($this->avecVgecSurrenderedToThisCompany));
+        $xw->writeElement('RandDExpenditureCreditsSurrendered', $this->money($this->randDExpenditureCreditsSurrendered));
+        if ($this->goodsExported === 'yes' || $this->servicesExported === 'yes' || $this->neitherGoodsNorServicesExported === 'yes') {
+            $xw->startElement('ExporterInformation');
+            if ($this->goodsExported !== null) $xw->writeElement('GoodsExported', $this->goodsExported);
+            if ($this->servicesExported !== null) $xw->writeElement('ServicesExported', $this->servicesExported);
+            if ($this->neitherGoodsNorServicesExported !== null) $xw->writeElement('NeitherGoodsNorServicesExported', $this->neitherGoodsNorServicesExported);
             $xw->endElement();
         }
-        $xw->endElement();
-    }
+        $xw->endElement(); // TaxReconciliation
 
-    if ($this->notIncluded !== null) {
-        $xw->startElement('NotIncluded');
+        $xw->startElement('IndicatorsAndInformation');
+        $xw->writeElement('FrankedInvestmentIncome', $this->money($this->frankedInvestmentIncome));
+        if (strtotime($this->periodTo) <= strtotime('2023-03-31')) {
+            $xw->writeElement('NumberOf51groupCompanies', (string) $this->numberOf51groupCompanies);
+        }
+        if ($this->instalmentPayments !== null) $xw->writeElement('InstalmentPayments', $this->instalmentPayments);
+        if ($this->veryLargeQIPs !== null) $xw->writeElement('VeryLargeQIPs', $this->veryLargeQIPs);
+        if ($this->groupPayment !== null) $xw->writeElement('GroupPayment', $this->groupPayment);
+        if ($this->intangibleAssets !== null) $xw->writeElement('IntangibleAssets', $this->intangibleAssets);
+        if ($this->crossBorderRoyalty !== null) $xw->writeElement('CrossBorderRoyalty', $this->crossBorderRoyalty);
+        $xw->writeElement('EatOutToHelpOutScheme', $this->money($this->eatOutToHelpOutScheme));
         $xw->endElement();
-    }
 
-    if ($this->qualifyingExpenditure !== null) {
-        $xw->startElement('QualifyingExpenditure');
-        $xw->endElement();
-    }
-
-    if ($this->lossesDeficitsAndExcess !== null) {
-        $xw->startElement('LossesDeficitsAndExcess');
-        $xw->endElement();
-    }
-
-    if ($this->northernIrelandInformation !== null) {
-        $xw->startElement('NorthernIrelandInformation');
-        $xw->endElement();
-    }
-
-    $xw->startElement('OverpaymentsAndRepayments');
-    $xw->writeElement('OwnRepaymentsLowerLimit', $this->money($this->ownRepaymentsLowerLimit));
-    if ($this->repaymentsForThePeriodCoveredByThisReturn !== null) {
-        $xw->startElement('RepaymentsForThePeriodCoveredByThisReturn');
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['corporationTax']) && $this->repaymentsForThePeriodCoveredByThisReturn['corporationTax'] !== null) {
-            $xw->writeElement('CorporationTax', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['corporationTax']));
-        }
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['incomeTax']) && $this->repaymentsForThePeriodCoveredByThisReturn['incomeTax'] !== null) {
-            $xw->writeElement('IncomeTax', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['incomeTax']));
-        }
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit'] !== null) {
-            $xw->writeElement('RandDTaxCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit']));
-        }
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit'] !== null) {
-            $xw->writeElement('RandDExpenditureCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit']));
-        }
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit'] !== null) {
-            $xw->writeElement('CreativeCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit']));
-        }
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC']) && $this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC'] !== null) {
-            $xw->writeElement('PayableAVECandVGEC', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC']));
-        }
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit'] !== null) {
-            $xw->writeElement('LandRemediationCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit']));
-        }
-        if (isset($this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit'] !== null) {
-            $xw->writeElement('PayableCapitalAllowancesFirstYearCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit']));
-        }
-        $xw->endElement(); // RepaymentsForThePeriodCoveredByThisReturn
-    }
-    if ($this->surrender !== null) {
-        $xw->startElement('Surrender');
-        $xw->writeElement('Amount', $this->money($this->surrender['amount']));
-        $xw->startElement('JointNotice');
-        if ($this->surrender['jointNoticeStatus'] === 'attached') {
-            $xw->writeElement('Attached', 'yes');
-        } else {
-            $xw->writeElement('WillFollow', 'yes');
-        }
-        $xw->endElement(); // JointNotice
-        if (isset($this->surrender['stopUntilNotice']) && $this->surrender['stopUntilNotice'] !== null) {
-            $xw->writeElement('StopUntilNotice', $this->money($this->surrender['stopUntilNotice']));
-        }
-        $xw->endElement(); // Surrender
-    }
-    if ($this->bankAccountDetails !== null) {
-        $xw->startElement('BankAccountDetails');
-        $xw->writeElement('BankName', $this->bankAccountDetails['bankName']);
-        $xw->writeElement('SortCode', $this->bankAccountDetails['sortCode']);
-        $xw->writeElement('AccountNumber', $this->bankAccountDetails['accountNumber']);
-        $xw->writeElement('AccountName', $this->bankAccountDetails['accountName']);
-        if (!empty($this->bankAccountDetails['buildingSocReference'])) {
-            $xw->writeElement('BuildingSocReference', $this->bankAccountDetails['buildingSocReference']);
-        }
-        $xw->endElement();
-    }
-    if ($this->rAndDCreditWithCondition !== null) $xw->writeElement('RAndDCreditWithCondition', $this->rAndDCreditWithCondition);
-    if ($this->paymentToPerson !== null) {
-        $xw->startElement('PaymentToPerson');
-        $xw->writeElement('Recipient', $this->paymentToPerson['recipient']);
-        
-        // Address structure
-        $xw->startElement('Address');
-        // Line elements (2-3 required)
-        foreach ($this->paymentToPerson['address']['lines'] as $line) {
-            if (!empty($line)) {
-                $xw->writeElement('Line', $line);
+        if ($this->researchAndDevelopmentCredit > 0 || $this->creativeCredit > 0) {
+            $xw->startElement('EnhancedExpenditure');
+            if ($this->smeClaim !== null) $xw->writeElement('SMEclaim', $this->smeClaim);
+            if ($this->rAndDIntensiveSMEclaim !== null) $xw->writeElement('RAndDIntensiveSMEclaim', $this->rAndDIntensiveSMEclaim);
+            if ($this->largeCompanyClaim !== null) $xw->writeElement('LargeCompanyClaim', $this->largeCompanyClaim);
+            if ($this->rAndDClaimNotificationForm !== null) $xw->writeElement('RAndDClaimNotificationForm', $this->rAndDClaimNotificationForm);
+            if ($this->additionalRAndDForm !== null) $xw->writeElement('AdditionalRAndDForm', $this->additionalRAndDForm);
+            if ($this->additionalCreativesForm !== null) $xw->writeElement('AdditionalCreativesForm', $this->additionalCreativesForm);
+            if ($this->researchAndDevelopmentCredit > 0 && strtotime($this->periodFrom) < strtotime('2024-04-01')) {
+                $xw->writeElement('RAndDExpenditureSME', $this->money($this->rAndDExpenditureSME));
+                $xw->writeElement('RandDEnhancedExpenditure', $this->money($this->randDEnhancedExpenditure));
             }
+            if ($this->creativeCredit > 0) {
+                $xw->writeElement('CreativesCoreExpenditure', $this->money($this->creativesCoreExpenditure));
+                $xw->writeElement('CreativeEnhancedExpenditure', $this->money($this->creativeEnhancedExpenditure));
+            }
+            $xw->writeElement('RandDAndCreativeEnhancedExpenditure', $this->money($this->randDEnhancedExpenditure + $this->creativeEnhancedExpenditure));
+            $xw->endElement();
         }
-        // Optional PostCode
-        if (!empty($this->paymentToPerson['address']['postCode'])) {
-            $xw->writeElement('PostCode', $this->paymentToPerson['address']['postCode']);
+
+        $xw->writeElement('LandRemediationEnhancedExpenditure', $this->money($this->landRemediationEnhancedExpenditure));
+
+        if ($this->allowancesAndCharges !== null) {
+            $xw->startElement('AllowancesAndCharges');
+            if (isset($this->allowancesAndCharges['FullExpensing'])) {
+                $xw->startElement('FullExpensing');
+                $xw->writeElement('BalancingCharges', $this->money($this->allowancesAndCharges['FullExpensing']['BalancingCharges'] ?? 0));
+                $xw->writeElement('CapitalAllowances', $this->money($this->allowancesAndCharges['FullExpensing']['CapitalAllowances'] ?? 0));
+                $xw->endElement();
+            }
+            $xw->endElement();
         }
-        $xw->endElement(); // Address
-        
-        $xw->writeElement('NomineeReference', $this->paymentToPerson['nomineeReference']);
-        $xw->endElement(); // PaymentToPerson
-    }
-    $xw->endElement();
 
-    $xw->startElement('Declaration');
-    $xw->writeElement('AcceptDeclaration', 'yes');
-    $xw->writeElement('Name', $this->declarantName ?? '');
-    $xw->writeElement('Status', $this->declarantStatus ?? '');
-    $xw->endElement();
+        if ($this->notIncluded !== null) {
+            $xw->startElement('NotIncluded');
+            $xw->endElement();
+        }
 
-    foreach ($this->schedules as $code => $fragment) {
-        $xw->writeRaw($fragment);
-    }
+        if ($this->qualifyingExpenditure !== null) {
+            $xw->startElement('QualifyingExpenditure');
+            $xw->endElement();
+        }
 
-    // Add CT600E Charity supplementary form if present
-    if ($this->ct600ePresent) {
-        $this->addCT600ESupplementaryForm($xw);
-    }
+        if ($this->lossesDeficitsAndExcess !== null) {
+            $xw->startElement('LossesDeficitsAndExcess');
+            $xw->endElement();
+        }
 
-    // Write attachments if any exist
-    if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments) || !empty($this->pdfAttachments) || !empty($this->additionalPdf)) {
-        $xw->startElement('AttachedFiles');
-        
-        // Schema choice: EITHER multiple Attachments (PDFs) OR XBRLsubmission + optional Attachments
-        
-        // If we have iXBRL attachments, use XBRLsubmission structure
-        if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments)) {
-            // Schema requires ONE XBRLsubmission element containing EITHER:
-            // - Just Accounts alone
-            // - OR Computation followed by optional Accounts (sequence)
-            $xw->startElement('XBRLsubmission');
-            
-            // If we have computations, write them first (required when both exist)
-            if (!empty($this->computationsIxbrlAttachments)) {
-                foreach ($this->computationsIxbrlAttachments as $attachment) {
-                    if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
-                        $xw->startElement('Computation');
-                        $xw->startElement('Instance');
-                        $xw->startElement('EncodedInlineXBRLDocument');
-                        
-                        if (isset($attachment['filename'])) {
-                            $xw->writeAttribute('Filename', $attachment['filename']);
+        if ($this->northernIrelandInformation !== null) {
+            $xw->startElement('NorthernIrelandInformation');
+            $xw->endElement();
+        }
+
+        $xw->startElement('OverpaymentsAndRepayments');
+        $xw->writeElement('OwnRepaymentsLowerLimit', $this->money($this->ownRepaymentsLowerLimit));
+        if ($this->repaymentsForThePeriodCoveredByThisReturn !== null) {
+            $xw->startElement('RepaymentsForThePeriodCoveredByThisReturn');
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['corporationTax']) && $this->repaymentsForThePeriodCoveredByThisReturn['corporationTax'] !== null) {
+                $xw->writeElement('CorporationTax', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['corporationTax']));
+            }
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['incomeTax']) && $this->repaymentsForThePeriodCoveredByThisReturn['incomeTax'] !== null) {
+                $xw->writeElement('IncomeTax', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['incomeTax']));
+            }
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit'] !== null) {
+                $xw->writeElement('RandDTaxCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['randDTaxCredit']));
+            }
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit'] !== null) {
+                $xw->writeElement('RandDExpenditureCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['randDExpenditureCredit']));
+            }
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit'] !== null) {
+                $xw->writeElement('CreativeCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['creativeCredit']));
+            }
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC']) && $this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC'] !== null) {
+                $xw->writeElement('PayableAVECandVGEC', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['payableAVECandVGEC']));
+            }
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit'] !== null) {
+                $xw->writeElement('LandRemediationCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['landRemediationCredit']));
+            }
+            if (isset($this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit']) && $this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit'] !== null) {
+                $xw->writeElement('PayableCapitalAllowancesFirstYearCredit', $this->money($this->repaymentsForThePeriodCoveredByThisReturn['payableCapitalAllowancesFirstYearCredit']));
+            }
+            $xw->endElement(); // RepaymentsForThePeriodCoveredByThisReturn
+        }
+        if ($this->surrender !== null) {
+            $xw->startElement('Surrender');
+            $xw->writeElement('Amount', $this->money($this->surrender['amount']));
+            $xw->startElement('JointNotice');
+            if ($this->surrender['jointNoticeStatus'] === 'attached') {
+                $xw->writeElement('Attached', 'yes');
+            } else {
+                $xw->writeElement('WillFollow', 'yes');
+            }
+            $xw->endElement(); // JointNotice
+            if (isset($this->surrender['stopUntilNotice']) && $this->surrender['stopUntilNotice'] !== null) {
+                $xw->writeElement('StopUntilNotice', $this->money($this->surrender['stopUntilNotice']));
+            }
+            $xw->endElement(); // Surrender
+        }
+        if ($this->bankAccountDetails !== null) {
+            $xw->startElement('BankAccountDetails');
+            $xw->writeElement('BankName', $this->bankAccountDetails['bankName']);
+            $xw->writeElement('SortCode', $this->bankAccountDetails['sortCode']);
+            $xw->writeElement('AccountNumber', $this->bankAccountDetails['accountNumber']);
+            $xw->writeElement('AccountName', $this->bankAccountDetails['accountName']);
+            if (!empty($this->bankAccountDetails['buildingSocReference'])) {
+                $xw->writeElement('BuildingSocReference', $this->bankAccountDetails['buildingSocReference']);
+            }
+            $xw->endElement();
+        }
+        if ($this->rAndDCreditWithCondition !== null) $xw->writeElement('RAndDCreditWithCondition', $this->rAndDCreditWithCondition);
+        if ($this->paymentToPerson !== null) {
+            $xw->startElement('PaymentToPerson');
+            $xw->writeElement('Recipient', $this->paymentToPerson['recipient']);
+
+            // Address structure
+            $xw->startElement('Address');
+            // Line elements (2-3 required)
+            foreach ($this->paymentToPerson['address']['lines'] as $line) {
+                if (!empty($line)) {
+                    $xw->writeElement('Line', $line);
+                }
+            }
+            // Optional PostCode
+            if (!empty($this->paymentToPerson['address']['postCode'])) {
+                $xw->writeElement('PostCode', $this->paymentToPerson['address']['postCode']);
+            }
+            $xw->endElement(); // Address
+
+            $xw->writeElement('NomineeReference', $this->paymentToPerson['nomineeReference']);
+            $xw->endElement(); // PaymentToPerson
+        }
+        $xw->endElement();
+
+        $xw->startElement('Declaration');
+        $xw->writeElement('AcceptDeclaration', 'yes');
+        $xw->writeElement('Name', $this->declarantName ?? '');
+        $xw->writeElement('Status', $this->declarantStatus ?? '');
+        $xw->endElement();
+
+        foreach ($this->schedules as $code => $fragment) {
+            $xw->writeRaw($fragment);
+        }
+
+        // Add CT600E Charity supplementary form if present
+        if ($this->ct600ePresent) {
+            $this->addCT600ESupplementaryForm($xw);
+        }
+
+        // Write attachments if any exist
+        if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments) || !empty($this->pdfAttachments) || !empty($this->additionalPdf)) {
+            $xw->startElement('AttachedFiles');
+
+            // Schema choice: EITHER multiple Attachments (PDFs) OR XBRLsubmission + optional Attachments
+
+            // If we have iXBRL attachments, use XBRLsubmission structure
+            if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments)) {
+                // Schema requires ONE XBRLsubmission element containing EITHER:
+                // - Just Accounts alone
+                // - OR Computation followed by optional Accounts (sequence)
+                $xw->startElement('XBRLsubmission');
+
+                // If we have computations, write them first (required when both exist)
+                if (!empty($this->computationsIxbrlAttachments)) {
+                    foreach ($this->computationsIxbrlAttachments as $attachment) {
+                        if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
+                            $xw->startElement('Computation');
+                            $xw->startElement('Instance');
+                            $xw->startElement('EncodedInlineXBRLDocument');
+
+                            if (isset($attachment['filename'])) {
+                                $xw->writeAttribute('Filename', $attachment['filename']);
+                            }
+                            if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
+                                $xw->writeAttribute('entryPoint', 'yes');
+                            }
+
+                            // Write the iXBRL content as base64
+                            $xw->text(base64_encode($attachment['content']));
+
+                            $xw->endElement(); // EncodedInlineXBRLDocument
+                            $xw->endElement(); // Instance
+                            $xw->endElement(); // Computation
                         }
-                        if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
-                            $xw->writeAttribute('entryPoint', 'yes');
-                        }
-                        
-                        // Write the iXBRL content as base64
-                        $xw->text(base64_encode($attachment['content']));
-                        
-                        $xw->endElement(); // EncodedInlineXBRLDocument
-                        $xw->endElement(); // Instance
-                        $xw->endElement(); // Computation
                     }
                 }
-            }
-            
-            // Then write accounts (can be alone or after computation)
-            if (!empty($this->accountsIxbrlAttachments)) {
-                foreach ($this->accountsIxbrlAttachments as $attachment) {
-                    if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
-                        $xw->startElement('Accounts');
-                        $xw->startElement('Instance');
-                        $xw->startElement('EncodedInlineXBRLDocument');
-                        
-                        if (isset($attachment['filename'])) {
-                            $xw->writeAttribute('Filename', $attachment['filename']);
+
+                // Then write accounts (can be alone or after computation)
+                if (!empty($this->accountsIxbrlAttachments)) {
+                    foreach ($this->accountsIxbrlAttachments as $attachment) {
+                        if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
+                            $xw->startElement('Accounts');
+                            $xw->startElement('Instance');
+                            $xw->startElement('EncodedInlineXBRLDocument');
+
+                            if (isset($attachment['filename'])) {
+                                $xw->writeAttribute('Filename', $attachment['filename']);
+                            }
+                            if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
+                                $xw->writeAttribute('entryPoint', 'yes');
+                            }
+
+                            // Write the iXBRL content as base64
+                            $xw->text(base64_encode($attachment['content']));
+
+                            $xw->endElement(); // EncodedInlineXBRLDocument
+                            $xw->endElement(); // Instance
+                            $xw->endElement(); // Accounts
                         }
-                        if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
-                            $xw->writeAttribute('entryPoint', 'yes');
-                        }
-                        
-                        // Write the iXBRL content as base64
-                        $xw->text(base64_encode($attachment['content']));
-                        
-                        $xw->endElement(); // EncodedInlineXBRLDocument
-                        $xw->endElement(); // Instance
-                        $xw->endElement(); // Accounts
                     }
                 }
+
+                $xw->endElement(); // XBRLsubmission
             }
-            
-            $xw->endElement(); // XBRLsubmission
-        }
-        
-        // Write PDF attachments (can be standalone or after XBRLsubmission)
-        // Used when NoAccountsReason is "Other - PDF attached with explanation"
-        if (!empty($this->pdfAttachments)) {
-            foreach ($this->pdfAttachments as $attachment) {
-                $xw->startElement('Attachment');
-                
-                // Required attributes
-                $xw->writeAttribute('Filename', $attachment['filename']);
-                $xw->writeAttribute('Format', $attachment['format']); // 'pdf' or 'esef'
-                $xw->writeAttribute('Type', $attachment['type']); // 'accounts', 'computations', 'other', etc.
-                
-                // Optional attributes
-                if (!empty($attachment['description'])) {
-                    $xw->writeAttribute('Description', $attachment['description']);
+
+            // Write PDF attachments (can be standalone or after XBRLsubmission)
+            // Used when NoAccountsReason is "Other - PDF attached with explanation"
+            if (!empty($this->pdfAttachments)) {
+                foreach ($this->pdfAttachments as $attachment) {
+                    $xw->startElement('Attachment');
+
+                    // Required attributes
+                    $xw->writeAttribute('Filename', $attachment['filename']);
+                    $xw->writeAttribute('Format', $attachment['format']); // 'pdf' or 'esef'
+                    $xw->writeAttribute('Type', $attachment['type']); // 'accounts', 'computations', 'other', etc.
+
+                    // Optional attributes
+                    if (!empty($attachment['description'])) {
+                        $xw->writeAttribute('Description', $attachment['description']);
+                    }
+                    if (isset($attachment['size'])) {
+                        $xw->writeAttribute('Size', $attachment['size']);
+                    }
+
+                    // Write the base64 encoded content directly (simple type with base64Binary)
+                    $xw->text($attachment['content']);
+
+                    $xw->endElement(); // Attachment
                 }
-                if (isset($attachment['size'])) {
-                    $xw->writeAttribute('Size', $attachment['size']);
+            }
+
+            // Write additional pdf documents as Attachment elements with format='esef' and type='other'
+            if (!empty($this->additionalPdf)) {
+                foreach ($this->additionalPdf as $attachment) {
+                    $xw->startElement('Attachment');
+
+                    // Required attributes
+                    $xw->writeAttribute('Filename', $attachment['filename']);
+                    $xw->writeAttribute('Format', 'pdf');
+                    $xw->writeAttribute('Type', 'other');
+
+                    // Optional attributes - can add description if needed
+
+                    // Write the base64 encoded iXBRL content
+                    $xw->text(base64_encode($attachment['content']));
+
+                    $xw->endElement(); // Attachment
                 }
-                
-                // Write the base64 encoded content directly (simple type with base64Binary)
-                $xw->text($attachment['content']);
-                
-                $xw->endElement(); // Attachment
             }
+
+            $xw->endElement(); // AttachedFiles
         }
-        
-        // Write additional pdf documents as Attachment elements with format='esef' and type='other'
-        if (!empty($this->additionalPdf)) {
-            foreach ($this->additionalPdf as $attachment) {
-                $xw->startElement('Attachment');
-                
-                // Required attributes
-                $xw->writeAttribute('Filename', $attachment['filename']);
-                $xw->writeAttribute('Format', 'pdf');
-                $xw->writeAttribute('Type', 'other');
-                
-                // Optional attributes - can add description if needed
-                
-                // Write the base64 encoded iXBRL content
-                $xw->text(base64_encode($attachment['content']));
-                
-                $xw->endElement(); // Attachment
-            }
-        }
-        
-        $xw->endElement(); // AttachedFiles
+
+        $xw->endElement(); // CompanyTaxReturn
+
+        $xw->endElement(); // IRenvelope
+
+        return $xw->outputMemory(true);
     }
 
-    $xw->endElement(); // CompanyTaxReturn
-
-    $xw->endElement(); // IRenvelope
-
-    return $xw->outputMemory(true);
-}
-
-/**
- * Add CT600E Charity supplementary form to XML
- */
-private function addCT600ESupplementaryForm(XMLWriter $xw): void
+    /**
+     * Add CT600E Charity supplementary form to XML
+     */
+    private function addCT600ESupplementaryForm(XMLWriter $xw): void
     {
         $xw->startElement('Charity');
-        
+
         // ClaimExemption element must come first per HMRC schema - always required
         $xw->startElement('ClaimExemption');
-        
+
         // Add required child elements for ClaimExemption
         if (!empty($this->ct600eData['charity_registration_number'])) {
             $xw->writeElement('RegistrationNumber', $this->ct600eData['charity_registration_number']);
         }
-        
+
         // Status reflects CT600E charity exemption claim (E15, E20, E25)
         $exemptionClaimed = $this->ct600eData['charity_exemption_claimed'] ?? false;
         $xw->startElement('Status');
-        
+
         // E15: ClaimingExemptionAllOrPart - only if charity is claiming any exemption
         if ($exemptionClaimed) {
             $xw->writeElement('ClaimingExemptionAllOrPart', 'yes');
         }
-        
+
         // AllCharitable section - choice between E20 (AllExempt) or E25 (SomeNotOnlyCharitable)
         $xw->startElement('AllCharitable');
         if ($exemptionClaimed) {
@@ -2293,11 +3061,11 @@ private function addCT600ESupplementaryForm(XMLWriter $xw): void
             $xw->writeElement('SomeNotOnlyCharitable', 'yes');
         }
         $xw->endElement(); // AllCharitable
-        
+
         $xw->endElement(); // Status
-        
+
         $xw->endElement(); // ClaimExemption
-        
+
         // Charity identification details
         if (!empty($this->ct600eData['charity_type'])) {
             $xw->writeElement('CharityType', $this->ct600eData['charity_type']);
@@ -2334,7 +3102,7 @@ private function addCT600ESupplementaryForm(XMLWriter $xw): void
         }
 
         $xw->endElement(); // Charity
-    }    
+    }
 
     private function preciseMoney(float $v): string
     {
@@ -2359,29 +3127,29 @@ private function addCT600ESupplementaryForm(XMLWriter $xw): void
         $financialYears = [];
         $grossTax = 0.0;
         $fyIndex = 0;
-        
+
         foreach ($allocated as $year => $profit) {
             $fyIndex++;
             $rate = $this->financialYearRates[$year] ?? 25.0;
-            
+
             // Fix for errors 9204 and 9213: Ensure tax equals profit * rate exactly
             $roundedProfit = round($profit, 2);
             // Calculate tax as exact multiplication to avoid rounding errors
             $tax = ($roundedProfit * ($rate / 100));
             // Round to 2 decimal places for display
             $displayTax = round($tax, 2);
-            
+
             $financialYears[] = [
-                'year' => $year, 
+                'year' => $year,
                 'details' => [[
-                    'profit' => $roundedProfit, 
-                    'rate' => $rate, 
+                    'profit' => $roundedProfit,
+                    'rate' => $rate,
                     'tax' => $displayTax
                 ]]
             ];
             $grossTax += $displayTax;
         }
-        
+
         $marginalRelief = $this->calculateMarginalRelief($taxable, $augmented, $grossTax, $augAllocated);
         return [$financialYears, $grossTax, $marginalRelief];
     }
@@ -2415,8 +3183,8 @@ private function addCT600ESupplementaryForm(XMLWriter $xw): void
         $upper = $this->mrUpperLimit * ($periodDays / 365) / $assoc;
 
         // Use default fraction (3/200) if denominator is zero or invalid
-        $fraction = $this->mrFractionDenominator != 0.0 
-            ? $this->mrFractionNumerator / $this->mrFractionDenominator 
+        $fraction = $this->mrFractionDenominator != 0.0
+            ? $this->mrFractionNumerator / $this->mrFractionDenominator
             : 3.0 / 200.0;
 
         if ($augmented <= $lower) {
@@ -2478,7 +3246,7 @@ private function addCT600ESupplementaryForm(XMLWriter $xw): void
                 '/<(vat:)?IRmark Type="generic">[A-Za-z0-9\/\+=]*<\/(vat:)?IRmark>/',
                 '',
                 $xmlString,
-                - 1,
+                -1,
                 $matchCount
             );
             if ($matchCount == 1) {

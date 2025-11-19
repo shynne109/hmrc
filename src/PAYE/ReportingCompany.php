@@ -6,6 +6,7 @@ class ReportingCompany
 {
     protected $details = [];   
     private $name = '';
+    private $reg_no = '';
     private $tax_office_number = '';
 	private $tax_office_reference = '';
 	private $accounts_office_reference = '';
@@ -20,7 +21,8 @@ class ReportingCompany
         ?string $taxOfficeReference = null,
         ?string $accountsOfficeReference = null,
         ?string $corporationTaxReference = null,
-        ?string $name = null
+        ?string $name = null,
+        ?string $regNo = null
     ) {
         $this->tax_office_number = $taxOfficeNumber;
         $this->tax_office_reference = $taxOfficeReference;
@@ -34,6 +36,7 @@ class ReportingCompany
         }
         $this->corporation_tax_reference = $corporationTaxReference;
         $this->name = $name ?? '';
+        $this->reg_no = $regNo ?? '';
     }
 
     public function getTaxOfficeNumber(): ?string
@@ -64,6 +67,16 @@ class ReportingCompany
     public function setName(string $value): void
     {
         $this->name = $value;
+    }
+
+    public function getRegNo(): string
+    {
+        return $this->reg_no;
+    }
+
+    public function setRegNo(string $value): void
+    {
+        $this->reg_no = $value;
     }
 
     public function setTaxOfficeNumber(string $value): void
