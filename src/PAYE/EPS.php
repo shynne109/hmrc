@@ -90,6 +90,8 @@ class EPS extends GovTalk
     private string $productName = '';
     private string $productVersion = '';
 
+    private string $senderType = 'Employer'; // default to 'Employer'
+
     /**
      * Flag indicating if the IRmark should be generated for outgoing XML.
      *
@@ -143,6 +145,11 @@ class EPS extends GovTalk
     public function setRelatedTaxYear(string $yyDashYy): void
     {
         $this->relatedTaxYear = $yyDashYy; // format '25-26'
+    }
+
+    public function setSenderType(string $type): void
+    {
+        $this->senderType = $type; // e.g. 'Agent' or 'Employer'
     }
 
     public function setAgentDetails(AgentDetails $agentDetails): self
@@ -348,25 +355,30 @@ class EPS extends GovTalk
         $this->addMessageKey('TaxOfficeNumber', $this->employer->getTaxOfficeNumber());
         $this->addMessageKey('TaxOfficeReference', $this->employer->getTaxOfficeReference());
 
+        if ($this->vendorId !== '') {
+            $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
+        }
+
         $bodyXml = $this->buildBodyXml();
         $this->setMessageBody($bodyXml);
         if ($this->validateSchema) {
             // If schema path added externally via setSchemaLocation() GovTalk will validate.
         }
-        if ($this->vendorId) {
-            $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
+         if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
+            $returnable                  = $this->getResponseEndpoint();
+        } else {
+            $returnable = ['errors' => $this->getResponseErrors()];
         }
-        if (!$this->sendMessage()) {
-            return false;
-        }
-        $resp = [
-            'request_xml' => $this->getFullXMLRequest(),
-            'response_xml' => $this->getFullXMLResponse(),
-            'qualifier' => $this->getResponseQualifier(),
-            'correlation_id' => $this->getResponseCorrelationId(),
-        ];
-        if ($this->responseHasErrors()) { $resp['errors'] = $this->getResponseErrors(); }
-        return $resp;
+        $returnable['correlation_id'] = $this->getResponseCorrelationId();
+        $returnable['request_xml']     = $this->getFullXMLRequest();
+        $returnable['response_xml']    = $this->getFullXMLResponse();
+        $returnable['qualifier']    = $this->getResponseQualifier();
+        $returnable['submission_request'] = $this->fullRequestString;
+
+        $this->logger->info($this->fullRequestString, ['eps_message' => 'request']);
+        $this->logger->info($this->fullResponseString, ['eps_message' => 'response']);
+
+        return $returnable;
     }
 
     /**
@@ -479,8 +491,14 @@ class EPS extends GovTalk
         // IRheader
         $xw->startElement('IRheader');
         $xw->startElement('Keys');
-        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeNumber'); $xw->text($this->employer->getTaxOfficeNumber()); $xw->endElement();
-        $xw->startElement('Key'); $xw->writeAttribute('Type','TaxOfficeReference'); $xw->text($this->employer->getTaxOfficeReference()); $xw->endElement();
+        $xw->startElement('Key'); 
+        $xw->writeAttribute('Type','TaxOfficeNumber'); 
+        $xw->text($this->employer->getTaxOfficeNumber()); 
+        $xw->endElement();
+        $xw->startElement('Key'); 
+        $xw->writeAttribute('Type','TaxOfficeReference'); 
+        $xw->text($this->employer->getTaxOfficeReference()); 
+        $xw->endElement();
         $xw->endElement(); // Keys
         $xw->writeElement('PeriodEnd', $this->periodEnd ?: date('Y-m-d'));
 
@@ -488,10 +506,12 @@ class EPS extends GovTalk
         if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
             $this->writeAgent($xw, $this->agentDetails);
         }
-
         $xw->writeElement('DefaultCurrency', 'GBP');
-        $xw->startElement('IRmark'); $xw->writeAttribute('Type','generic'); $xw->text('IRmark+Token'); $xw->endElement();
-        $xw->writeElement('Sender', 'Employer');
+        $xw->startElement('IRmark'); 
+        $xw->writeAttribute('Type','generic'); 
+        $xw->text('IRmark+Token'); 
+        $xw->endElement();
+        $xw->writeElement('Sender', $this->senderType);
         $xw->endElement(); // IRheader
 
         // EmployerPaymentSummary
