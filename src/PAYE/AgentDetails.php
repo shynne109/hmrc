@@ -12,8 +12,7 @@ class AgentDetails
     private ?string $agentId = null;
     private ?string $company = null;
     private ?array $address = null;
-    private ?array $emails = [];
-    private ?array $telephones = [];
+    private ?ContactDetails $contact = null;
 
     public function __construct(array $data = [])
     {
@@ -26,23 +25,8 @@ class AgentDetails
         if (isset($data['Address'])) {
             $this->address = $data['Address'];
         }
-        if (isset($data['Email'])) {
-            // Handle both single email and array of emails
-            if (is_array($data['Email'])) {
-                $this->emails = $data['Email'];
-            } else {
-                $this->emails = [$data['Email']];
-            }
-        }
-        if (isset($data['Telephone'])) {
-            // Handle both single phone and array of phones
-            if (is_array($data['Telephone']) && isset($data['Telephone']['Number'])) {
-                // Single phone number
-                $this->telephones = [$data['Telephone']];
-            } elseif (is_array($data['Telephone'])) {
-                // Multiple phone numbers
-                $this->telephones = $data['Telephone'];
-            }
+        if (isset($data['Contact'])) {
+            $this->contact = new ContactDetails($data['Contact']);
         }
     }
 
@@ -98,61 +82,24 @@ class AgentDetails
         return $this;
     }
 
+   
     /**
-     * Get all email addresses
+     * Get Agent Contact
      */
-    public function getEmails(): array
+    public function getAgentContact(): ?ContactDetails
     {
-        return $this->emails ?? [];
+         return $this->contact;
     }
 
     /**
-     * Add email address
+     * Set Agent Contact
      */
-    public function addEmail(string $email): self
+    public function setAgentContact($contact): self
     {
-        if (!$this->emails) {
-            $this->emails = [];
+        if (is_string($contact) || is_array($contact)) {
+            $contact = new ContactDetails(is_string($contact) ? ['Name' => $contact] : $contact);
         }
-        $this->emails[] = $email;
-        return $this;
-    }
-
-    /**
-     * Set email addresses
-     */
-    public function setEmails(array $emails): self
-    {
-        $this->emails = $emails;
-        return $this;
-    }
-
-    /**
-     * Get all telephone numbers
-     */
-    public function getTelephones(): array
-    {
-        return $this->telephones ?? [];
-    }
-
-    /**
-     * Add telephone number
-     */
-    public function addTelephone(string $number): self
-    {
-        if (!$this->telephones) {
-            $this->telephones = [];
-        }
-        $this->telephones[] = ['Number' => $number];
-        return $this;
-    }
-
-    /**
-     * Set telephone numbers (array of ['Number' => '...'] format)
-     */
-    public function setTelephones(array $telephones): self
-    {
-        $this->telephones = $telephones;
+        $this->contact = $contact;
         return $this;
     }
 
@@ -164,8 +111,7 @@ class AgentDetails
         return !empty($this->agentId) 
             || !empty($this->company) 
             || !empty($this->address) 
-            || !empty($this->emails) 
-            || !empty($this->telephones);
+            || ($this->contact !== null && $this->contact->hasData());
     }
 
     /**
@@ -187,12 +133,8 @@ class AgentDetails
             $data['Address'] = $this->address;
         }
 
-        if (!empty($this->emails)) {
-            $data['Email'] = $this->emails;
-        }
-
-        if (!empty($this->telephones)) {
-            $data['Telephone'] = $this->telephones;
+        if ($this->contact !== null && $this->contact->hasData()) {
+            $data['Contact'] = $this->contact->toArray();
         }
 
         return $data;

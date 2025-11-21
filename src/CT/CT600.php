@@ -8,6 +8,7 @@ use HMRC\GovTalk;
 use Psr\Log\NullLogger;
 use HMRC\PAYE\AgentDetails;
 use Psr\Log\LoggerInterface;
+use HMRC\PAYE\ContactDetails;
 use HMRC\PAYE\ReportingCompany;
 
 /**
@@ -112,7 +113,6 @@ class CT600 extends GovTalk
     private ?array $companyAddress = null;
     private ?array $taxOffice = null;
     private ?array $shares = null;
-    private ?array $contactDetails = null;
     private ?string $significantEvent = null;
     private ?float $lossesCarriedBackSummary = null;
     private ?float $lossesCarriedForwardSummary = null;
@@ -333,6 +333,7 @@ class CT600 extends GovTalk
     private const NS = 'http://www.govtalk.gov.uk/taxation/CT/5';
 
     private ?AgentDetails $agentDetails = null;
+    private ?ContactDetails $contactDetails = null;
 
 
 
@@ -380,6 +381,17 @@ class CT600 extends GovTalk
     public function getAgentDetails(): ?AgentDetails
     {
         return $this->agentDetails;
+    }
+
+    public function setContactDetails(ContactDetails $contactDetails): self
+    {
+        $this->contactDetails = $contactDetails;
+        return $this;
+    }
+
+    public function getContactDetails(): ?ContactDetails
+    {
+        return $this->contactDetails;
     }
 
 
@@ -1045,11 +1057,7 @@ class CT600 extends GovTalk
         $this->shares = $v;
         return $this;
     }
-    public function setContactDetails(?array $v): self
-    {
-        $this->contactDetails = $v;
-        return $this;
-    }
+    
     public function setSignificantEvent(?string $v): self
     {
         $this->significantEvent = $v;
@@ -2233,77 +2241,113 @@ class CT600 extends GovTalk
         $this->corporationTax = $corporationTax;
         $this->netCorporationTaxLiability = $netCorporationTaxLiability;
     }
-    private function writeAgent(XMLWriter $xml, AgentDetails $agent): void
+    private function writeAgent(XMLWriter $xw, AgentDetails $agent): void
     {
-        $xml->startElement('Agent');
+        $xw->startElement('Agent');
 
         // Agent ID
         if ($agent->getAgentId() !== null) {
-            $xml->writeElement('AgentID', $agent->getAgentId());
+            $xw->writeElement('AgentID', $agent->getAgentId());
         }
 
         // Company name
         if ($agent->getCompany() !== null) {
-            $xml->writeElement('Company', $agent->getCompany());
+            $xw->writeElement('Company', $agent->getCompany());
         }
 
         // Address
         if ($agent->getAddress() !== null) {
             $address = $agent->getAddress();
-            $xml->startElement('Address');
+            $xw->startElement('Address');
 
             // Address lines
             if (isset($address['Line'])) {
                 $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
                 foreach ($lines as $line) {
                     if (!empty($line)) {
-                        $xml->writeElement('Line', $line);
+                        $xw->writeElement('Line', $line);
                     }
                 }
             }
 
             // Post Code
             if (isset($address['PostCode']) && !empty($address['PostCode'])) {
-                $xml->writeElement('PostCode', $address['PostCode']);
+                $xw->writeElement('PostCode', $address['PostCode']);
             }
 
             // Country
             if (isset($address['Country']) && !empty($address['Country'])) {
-                $xml->writeElement('Country', $address['Country']);
+                $xw->writeElement('Country', $address['Country']);
             }
-
-            $xml->endElement(); // Address
+            $xw->endElement(); // Address
+        }
+        if ($agent->getAgentContact() !== null && $agent->getAgentContact()->hasData()) {
+            $this->writeContactDetails($xw, $agent->getAgentContact());
         }
 
-        // Contact details
-        $emails = $agent->getEmails();
-        $telephones = $agent->getTelephones();
+        $xw->endElement(); // Agent
+    }
 
-        if (!empty($emails) || !empty($telephones)) {
-            $xml->startElement('Contact');
+    private function writeContactDetails(XMLWriter $xw, ContactDetails $contactDetails): void
+    {
+        $xw->startElement('Principal');
 
-            // Emails
-            foreach ($emails as $email) {
-                if (!empty(trim($email))) {
-                    $xml->writeElement('Email', trim($email));
+        if ($contactDetails->hasData()) {
+            $xw->startElement('Contact');
+
+            // Name structure (0..1)
+            $name = $contactDetails->getName();
+            if ($name !== null && !empty($name)) {
+                $xw->startElement('Name');
+                
+                // Title (0..1) - Optional
+                if (isset($name['Ttl']) && !empty($name['Ttl'])) {
+                    $xw->writeElement('Ttl', $name['Ttl']);
                 }
-            }
-
-            // Telephones
-            foreach ($telephones as $telephone) {
-                if (is_array($telephone) && isset($telephone['Number'])) {
-                    if (!empty(trim($telephone['Number']))) {
-                        $xml->startElement('Telephone');
-                        $xml->writeElement('Number', trim($telephone['Number']));
-                        $xml->endElement(); // Telephone
+                
+                // Forename(s) (1..2) - Required, at least one
+                if (isset($name['Fore']) && is_array($name['Fore'])) {
+                    foreach ($name['Fore'] as $forename) {
+                        if (!empty($forename)) {
+                            $xw->writeElement('Fore', $forename);
+                        }
                     }
                 }
+                
+                // Surname (1..1) - Required
+                if (isset($name['Sur']) && !empty($name['Sur'])) {
+                    $xw->writeElement('Sur', $name['Sur']);
+                }
+                
+                $xw->endElement(); // Name
             }
 
-            $xml->endElement(); // Contact
+            // Email (0..unbounded)
+            $email = $contactDetails->getEmail();
+            if (!empty($email)) {
+                $xw->writeElement('Email', trim($email));
+            }
+
+            // Telephone (0..unbounded)
+            $telephone = $contactDetails->getTelephone();
+            if (!empty($telephone)) {
+                $xw->startElement('Telephone');
+                $xw->writeElement('Number', trim($telephone));
+                $xw->endElement(); // Telephone
+            }
+
+            // Fax (0..unbounded)
+            $fax = $contactDetails->getFax();
+            if (!empty($fax)) {
+                $xw->startElement('Fax');
+                $xw->writeElement('Number', trim($fax));
+                $xw->endElement(); // Fax
+            }
+            
+            $xw->endElement(); // Contact
         }
 
-        $xml->endElement(); // Agent
+        $xw->endElement(); // Principal
     }
 
     private function buildBody(): string
@@ -2337,6 +2381,11 @@ class CT600 extends GovTalk
             $xw->startElement('Principal');
             $xw->writeElement('BusinessActivity', $this->principalBusinessActivity);
             $xw->endElement();
+        }
+
+        // Contact details
+        if ($this->contactDetails !== null && $this->contactDetails->hasData()) {
+            $this->writeContactDetails($xw, $this->contactDetails);
         }
 
         // Agent information
