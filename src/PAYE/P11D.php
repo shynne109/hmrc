@@ -151,6 +151,11 @@ class P11D extends GovTalk
         return $this->agentDetails;
     }
 
+    public function getMessageClass()
+    {
+        return self::MESSAGE_CLASS;
+    }
+
     public function setContactDetails(ContactDetails $contactDetails): self
     {
         $this->contactDetails = $contactDetails;

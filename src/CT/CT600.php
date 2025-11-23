@@ -463,6 +463,11 @@ class CT600 extends GovTalk
         return $this;
     }
 
+    public function getMessageClass()
+    {
+        return self::MESSAGE_CLASS;
+    }
+
     public function setCorporationTaxRate(float $rate): self
     {
         $this->corporationTaxRate = $rate;

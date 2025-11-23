@@ -177,6 +177,11 @@ class EPS extends GovTalk
         return $this->contactDetails;
     }
 
+    public function getMessageClass()
+    {
+        return self::MESSAGE_CLASS;
+    }
+
     public function setPeriodEnd(string $date): void
     {
         $this->periodEnd = $date;
