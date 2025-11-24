@@ -34,7 +34,7 @@ class CarBenefits
     public function validate(): array
     {
         $e = [];
-        $req = ['make','firstRegd','co2','fuel','amendment','price','availFrom','cashEquiv'];
+        $req = ['make','firstRegd','co2','fuel','id','amendment','price','availFrom','cashEquiv'];
         foreach ($req as $k) {
             if (!isset($this->data[$k])) { $e[] = $k . ' missing'; }
         }
