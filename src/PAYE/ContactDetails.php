@@ -19,10 +19,10 @@ namespace HMRC\PAYE;
  */
 class ContactDetails
 {
-    private ?array $name = null; // ['Ttl' => '...', 'Fore' => ['...'], 'Sur' => '...']
-    private ?string $email = null;
-    private ?string $telephone = null;
-    private ?string $fax = null;
+    private $name = []; // ['Ttl' => '...', 'Fore' => ['...'], 'Sur' => '...']
+    private $email = "";
+    private $telephone = "";
+    private $fax = "";
 
     public function __construct(array $data = [])
     {
@@ -68,7 +68,7 @@ class ContactDetails
      * Get Name structure
      * Returns array with 'Ttl', 'Fore', and 'Sur' keys
      */
-    public function getName(): ?array
+    public function getName()
     {
         return $this->name;
     }
@@ -136,7 +136,7 @@ class ContactDetails
     /**
      * Get email
      */
-    public function getEmail(): ?string
+    public function getEmail()
     {
         return $this->email;
     }
@@ -155,7 +155,7 @@ class ContactDetails
     /**
      * Get telephone
      */
-    public function getTelephone(): ?string
+    public function getTelephone()
     {
         return $this->telephone;
     }
@@ -174,7 +174,7 @@ class ContactDetails
     /**
      * Get fax number
      */
-    public function getFax(): ?string
+    public function getFax()
     {
         return $this->fax;
     }

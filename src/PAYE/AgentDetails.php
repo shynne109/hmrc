@@ -9,9 +9,9 @@ namespace HMRC\PAYE;
  */
 class AgentDetails
 {
-    private ?string $agentId = null;
-    private ?string $company = null;
-    private ?array $address = null;
+    private $agentId = "";
+    private $company = "";
+    private $address = [];
     private ?ContactDetails $contact = null;
 
     public function __construct(array $data = [])
