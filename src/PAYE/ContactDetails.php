@@ -20,9 +20,9 @@ namespace HMRC\PAYE;
 class ContactDetails
 {
     private ?array $name = null; // ['Ttl' => '...', 'Fore' => ['...'], 'Sur' => '...']
-    private ?string $email = null;
-    private ?string $telephone = null;
-    private ?string $fax = null;
+    private $email = "";
+    private $telephone = "";
+    private $fax = "";
 
     public function __construct(array $data = [])
     {

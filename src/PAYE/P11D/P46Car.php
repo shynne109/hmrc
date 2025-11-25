@@ -40,7 +40,6 @@ class P46Car
         if (!isset($data['forename']) || !isset($data['surname']) || !isset($data['submissionReason'])) {
             throw new \InvalidArgumentException('P46Car requires forename, surname, and submissionReason');
         }
-
         $this->forename = $data['forename'];
         $this->surname = $data['surname'];
         $this->submissionReason = $data['submissionReason'];
