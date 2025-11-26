@@ -2,6 +2,8 @@
 
 namespace HMRC\PAYE;
 
+use XMLWriter;
+
 /**
  * Agent Details for PAYE submissions
  * 
@@ -138,5 +140,53 @@ class AgentDetails
         }
 
         return $data;
+    }
+
+
+    public function writeAgent(XMLWriter $xw): void
+    {
+        $xw->startElement('Agent');
+
+        // Agent ID
+        if ($this->getAgentId() !== null) {
+            $xw->writeElement('AgentID', $this->getAgentId());
+        }
+
+        // Company name
+        if ($this->getCompany() !== null) {
+            $xw->writeElement('Company', $this->getCompany());
+        }
+
+        // Address
+        if ($this->getAddress() !== null) {
+            $address = $this->getAddress();
+            $xw->startElement('Address');
+
+            // Address lines
+            if (isset($address['Line'])) {
+                $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
+                foreach ($lines as $line) {
+                    if (!empty($line)) {
+                        $xw->writeElement('Line', $line);
+                    }
+                }
+            }
+
+            // Post Code
+            if (isset($address['PostCode']) && !empty($address['PostCode'])) {
+                $xw->writeElement('PostCode', $address['PostCode']);
+            }
+
+            // Country
+            if (isset($address['Country']) && !empty($address['Country'])) {
+                $xw->writeElement('Country', $address['Country']);
+            }
+            $xw->endElement(); // Address
+        }
+        if ($this->getAgentContact() !== null && $this->getAgentContact()->hasData()) {
+            $this->getAgentContact()->writeAgentContactDetails($xw);
+        }
+
+        $xw->endElement(); // Agent
     }
 }

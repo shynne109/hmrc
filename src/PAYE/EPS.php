@@ -400,114 +400,7 @@ class EPS extends GovTalk
         return $returnable;
     }
 
-    private function writeAgent(XMLWriter $xw, AgentDetails $agent): void
-    {
-        $xw->startElement('Agent');
-
-        // Agent ID
-        if ($agent->getAgentId() !== null) {
-            $xw->writeElement('AgentID', $agent->getAgentId());
-        }
-
-        // Company name
-        if ($agent->getCompany() !== null) {
-            $xw->writeElement('Company', $agent->getCompany());
-        }
-
-        // Address
-        if ($agent->getAddress() !== null) {
-            $address = $agent->getAddress();
-            $xw->startElement('Address');
-
-            // Address lines
-            if (isset($address['Line'])) {
-                $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
-                foreach ($lines as $line) {
-                    if (!empty($line)) {
-                        $xw->writeElement('Line', $line);
-                    }
-                }
-            }
-
-            // Post Code
-            if (isset($address['PostCode']) && !empty($address['PostCode'])) {
-                $xw->writeElement('PostCode', $address['PostCode']);
-            }
-
-            // Country
-            if (isset($address['Country']) && !empty($address['Country'])) {
-                $xw->writeElement('Country', $address['Country']);
-            }
-            $xw->endElement(); // Address
-        }
-        if ($agent->getAgentContact() !== null && $agent->getAgentContact()->hasData()) {
-            $this->writeContactDetails($xw, $agent->getAgentContact());
-        }
-
-        $xw->endElement(); // Agent
-    }
-
-    private function writeContactDetails(XMLWriter $xw, ContactDetails $contactDetails): void
-    {
-        $xw->startElement('Principal');
-
-        if ($contactDetails->hasData()) {
-            $xw->startElement('Contact');
-
-            // Name structure (0..1)
-            $name = $contactDetails->getName();
-            if ($name !== null && !empty($name)) {
-                $xw->startElement('Name');
-                
-                // Title (0..1) - Optional
-                if (isset($name['Ttl']) && !empty($name['Ttl'])) {
-                    $xw->writeElement('Ttl', $name['Ttl']);
-                }
-                
-                // Forename(s) (1..2) - Required, at least one
-                if (isset($name['Fore']) && is_array($name['Fore'])) {
-                    foreach ($name['Fore'] as $forename) {
-                        if (!empty($forename)) {
-                            $xw->writeElement('Fore', $forename);
-                        }
-                    }
-                }
-                
-                // Surname (1..1) - Required
-                if (isset($name['Sur']) && !empty($name['Sur'])) {
-                    $xw->writeElement('Sur', $name['Sur']);
-                }
-                
-                $xw->endElement(); // Name
-            }
-
-            // Email (0..unbounded)
-            $email = $contactDetails->getEmail();
-            if (!empty($email)) {
-                $xw->writeElement('Email', trim($email));
-            }
-
-            // Telephone (0..unbounded)
-            $telephone = $contactDetails->getTelephone();
-            if (!empty($telephone)) {
-                $xw->startElement('Telephone');
-                $xw->writeElement('Number', trim($telephone));
-                $xw->endElement(); // Telephone
-            }
-
-            // Fax (0..unbounded)
-            $fax = $contactDetails->getFax();
-            if (!empty($fax)) {
-                $xw->startElement('Fax');
-                $xw->writeElement('Number', trim($fax));
-                $xw->endElement(); // Fax
-            }
-            
-            $xw->endElement(); // Contact
-        }
-
-        $xw->endElement(); // Principal
-    }
+    
 
     /**
      * Validate business rules
@@ -554,12 +447,12 @@ class EPS extends GovTalk
 
         // Contact details
         if ($this->contactDetails !== null && $this->contactDetails->hasData()) {
-            $this->writeContactDetails($xw, $this->contactDetails);
+            $this->contactDetails->writeContactDetails($xw);
         }
 
         // Agent information
         if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
-            $this->writeAgent($xw, $this->agentDetails);
+            $this->agentDetails->writeAgent($xw);
         }
         $xw->writeElement('DefaultCurrency', 'GBP');
         $xw->startElement('IRmark'); 
