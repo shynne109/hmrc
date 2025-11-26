@@ -413,13 +413,14 @@ class FPS extends GovTalk
         $xw->writeElement('HoursWorked', $d['hoursWorked']);
         // TaxCode with attributes
         $xw->startElement('TaxCode');
-        $xw->text($d['taxCode']);
         if (!empty($d['taxCodeBasisNonCumulative'])) {
             $xw->writeAttribute('BasisNonCumulative', 'yes');
         }
-        if (!empty($d['taxRegime']) && in_array($d['taxRegime'], ['S', 'C'], true)) {
+        
+        if ($d['taxRegime'] ?? '' != '') {
             $xw->writeAttribute('TaxRegime', $d['taxRegime']);
         }
+        $xw->text($d['taxCode']);
         $xw->endElement();
         $xw->writeElement('TaxablePay', number_format($d['taxablePay'], 2, '.', ''));
         // Additional period monetary elements if present (ordering per schema)
