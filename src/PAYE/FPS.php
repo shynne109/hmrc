@@ -436,12 +436,12 @@ class FPS extends GovTalk
             }
         }
         // Benefits (Cars) structure (prefers CarBenefits objects but supports legacy array data)
-        $carObjects = method_exists($employee, 'getCarBenefits') ? $employee->getCarBenefits() : [];
+        $carObjects = $employee->getCarBenefits();
         if (!empty($carObjects) || (!empty($d['benefitsCars']) && is_array($d['benefitsCars']))) {
             $xw->startElement('Benefits');
             if (!empty($carObjects)) {
                 foreach ($carObjects as $obj) {
-                    if ($obj instanceof CarBenefits && !$obj->validate()) {
+                    if ($obj instanceof CarBenefits) {
                         $obj->writeXml($xw);
                     }
                 }
