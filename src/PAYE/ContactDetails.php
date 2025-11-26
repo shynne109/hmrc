@@ -311,12 +311,32 @@ class ContactDetails
                 if (isset($name['Fore']) && is_array($name['Fore'])) {
                     foreach ($name['Fore'] as $forename) {
                         if (!empty($forename)) {
-                            $xw->writeElement('Fore', $forename);
+                            // Split forename by spaces if it contains multiple names
+                            if (strpos($forename, ' ') !== false) {
+                                $forenameParts = explode(' ', trim($forename));
+                                foreach ($forenameParts as $part) {
+                                    if (!empty($part)) {
+                                        $xw->writeElement('Fore', $part);
+                                    }
+                                }
+                            } else {
+                                $xw->writeElement('Fore', $forename);
+                            }
                         }
                     }
                 }elseif (isset($name['Fore']) && is_string($name['Fore']) && !empty($name['Fore'])) {
                     // Handle single forename as string
-                    $xw->writeElement('Fore', $name['Fore']);
+                    // Split forename by spaces if it contains multiple names
+                    if (strpos($name['Fore'], ' ') !== false) {
+                        $forenames = explode(' ', trim($name['Fore']));
+                        foreach ($forenames as $forename) {
+                            if (!empty($forename)) {
+                                $xw->writeElement('Fore', $forename);
+                            }
+                        }
+                    } else {
+                        $xw->writeElement('Fore', $name['Fore']);
+                    }
                 }
                 
                 // Surname (1..1) - Required
