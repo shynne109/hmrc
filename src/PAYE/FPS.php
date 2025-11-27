@@ -611,7 +611,6 @@ class FPS extends GovTalk
             $returnable = ['errors' => $this->getResponseErrors()];
         }
         $returnable['correlation_id'] = $this->getResponseCorrelationId();
-            
         $returnable['request_xml']     = $this->getFullXMLRequest();
         $returnable['response_xml']    = $this->getFullXMLResponse();
         $returnable['qualifier']    = $this->getResponseQualifier();
