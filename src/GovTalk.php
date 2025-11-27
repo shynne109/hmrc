@@ -1106,10 +1106,21 @@ class GovTalk implements LoggerAwareInterface
         $this->setMessageBody('');
 
         if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
-            return true;
+            $returnable = $this->getResponseEndpoint();
         } else {
-            return false;
+            $returnable = ['errors' => $this->getResponseErrors()];
         }
+        $returnable['correlation_id'] = $this->getResponseCorrelationId();
+        $returnable['request_xml']     = $this->getFullXMLRequest();
+        $returnable['response_xml']    = $this->getFullXMLResponse();
+        $returnable['qualifier']    = $this->getResponseQualifier();
+        $returnable['submission_request'] = $this->fullRequestString;
+
+        $this->logger->info($this->fullRequestString, ['fps_message' => 'request']);
+        $this->logger->info($this->fullResponseString, ['fps_message' => 'response']);
+
+        return $returnable;
+        
     }
 
     /**
