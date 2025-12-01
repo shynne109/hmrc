@@ -366,92 +366,99 @@ class P11D extends GovTalk
     }
 
 
+    /**
+     * Write P11D(b) element for Class 1A National Insurance contributions
+     * XSD Structure:
+     * - P11Db
+     *   - Class1AcontributionsDue (with optional @NICsRate attribute)
+     *     - TotalBenefit (with optional @AdjustmentRequired attribute)
+     *     - NICpayable (optional)
+     *     - Adjustments (optional)
+     *       - TotalBenefit
+     *       - AmountDue (Description, Adjustment)
+     *       - AmountNotDue (Description, Adjustment)
+     *       - Total
+     *       - Payable
+     */
     private function writeP11Db(XMLWriter $xml, P11Db $p11Db): void
     {
         $xml->startElement('P11Db');
-
-        $data = $p11Db->toArray();
-        if (isset($data['Class1AcontributionsDue'])) {
-            $this->writeP11DbClass1A($xml, $data['Class1AcontributionsDue']);
-        }
-
-        if (isset($data['Declaration'])) {
-            $xml->writeElement('Declaration', $data['Declaration']);
-        }
-
+        $this->writeP11DbClass1A($xml, $p11Db);
         $xml->endElement(); // P11Db
     }
 
-    private function writeP11DbClass1A(XMLWriter $xml, array $class1A): void
+    /**
+     * Write Class1AcontributionsDue element
+     */
+    private function writeP11DbClass1A(XMLWriter $xml, P11Db $p11Db): void
     {
         $xml->startElement('Class1AcontributionsDue');
 
-        // Write attributes if present
-        if (isset($class1A['@attributes'])) {
-            foreach ($class1A['@attributes'] as $attrName => $attrValue) {
-                $xml->writeAttribute($attrName, $attrValue);
-            }
+        // NICsRate attribute (optional, default 15.00)
+        $nicsRate = $p11Db->getNicsRate();
+        if ($nicsRate !== 15.00) {
+            $xml->writeAttribute('NICsRate', number_format($nicsRate, 2, '.', ''));
         }
 
-        // Write each element
-        foreach ($class1A as $key => $value) {
-            if ($key === '@attributes') {
-                continue; // Already handled
-            }
+        // TotalBenefit element (mandatory)
+        $xml->startElement('TotalBenefit');
+        if ($p11Db->getAdjustmentRequired() === true) {
+            $xml->writeAttribute('AdjustmentRequired', 'yes');
+        }
+        $xml->text(number_format($p11Db->getTotalBenefit() ?? 0, 2, '.', ''));
+        $xml->endElement(); // TotalBenefit
 
-            if (is_array($value)) {
-                if ($key === 'TotalBenefit') {
-                    $xml->startElement($key);
-                    if (isset($value['AdjustmentRequired'])) {
-                        $xml->writeAttribute('AdjustmentRequired', $value['AdjustmentRequired']);
-                    }
-                    $xml->text($value['value']);
-                    $xml->endElement();
-                } elseif ($key === 'AmountDue' || $key === 'AmountNotDue') {
-                    $xml->startElement($key);
-                    if (isset($value['Description'])) {
-                        $xml->writeElement('Description', $value['Description']);
-                    }
-                    if (isset($value['Adjustment'])) {
-                        $xml->writeElement('Adjustment', $value['Adjustment']);
-                    }
-                    $xml->endElement();
-                } elseif ($key === 'Adjustments') {
-                    $xml->startElement($key);
-                    foreach ($value as $adjKey => $adjValue) {
-                        if (is_array($adjValue)) {
-                            if ($adjKey === 'AmountDue' || $adjKey === 'AmountNotDue') {
-                                $xml->startElement($adjKey);
-                                if (isset($adjValue['Description'])) {
-                                    $xml->writeElement('Description', $adjValue['Description']);
-                                }
-                                if (isset($adjValue['Adjustment'])) {
-                                    $xml->writeElement('Adjustment', $adjValue['Adjustment']);
-                                }
-                                $xml->endElement();
-                            }
-                        } else {
-                            $xml->writeElement($adjKey, $adjValue);
-                        }
-                    }
-                    $xml->endElement();
-                } else {
-                    // Fallback for other array structures
-                    $xml->startElement($key);
-                    foreach ($value as $subKey => $subValue) {
-                        if (!is_array($subValue)) {
-                            $xml->writeElement($subKey, $subValue);
-                        }
-                    }
-                    $xml->endElement();
-                }
-            } else {
-                // Scalar value
-                $xml->writeElement($key, (string)$value);
-            }
+        // NICpayable element (optional)
+        $nicPayable = $p11Db->getNicPayable();
+        if ($nicPayable !== null) {
+            $xml->writeElement('NICpayable', number_format($nicPayable, 2, '.', ''));
+        }
+
+        // Adjustments element (optional)
+        $adjustments = $p11Db->getAdjustments();
+        if ($adjustments !== null) {
+            $this->writeP11DbAdjustments($xml, $adjustments);
         }
 
         $xml->endElement(); // Class1AcontributionsDue
+    }
+
+    /**
+     * Write Adjustments element for P11D(b)
+     * XSD Structure:
+     * - Adjustments
+     *   - TotalBenefit
+     *   - AmountDue (Description, Adjustment)
+     *   - AmountNotDue (Description, Adjustment)
+     *   - Total
+     *   - Payable
+     */
+    private function writeP11DbAdjustments(XMLWriter $xml, array $adjustments): void
+    {
+        $xml->startElement('Adjustments');
+
+        // TotalBenefit (data item 113)
+        $xml->writeElement('TotalBenefit', number_format($adjustments['totalBenefit'], 2, '.', ''));
+
+        // AmountDue (data items 114-115)
+        $xml->startElement('AmountDue');
+        $xml->writeElement('Description', $adjustments['amountDue']['description']);
+        $xml->writeElement('Adjustment', number_format($adjustments['amountDue']['adjustment'], 2, '.', ''));
+        $xml->endElement(); // AmountDue
+
+        // AmountNotDue (data items 116-117)
+        $xml->startElement('AmountNotDue');
+        $xml->writeElement('Description', $adjustments['amountNotDue']['description']);
+        $xml->writeElement('Adjustment', number_format($adjustments['amountNotDue']['adjustment'], 2, '.', ''));
+        $xml->endElement(); // AmountNotDue
+
+        // Total (data item 118)
+        $xml->writeElement('Total', number_format($adjustments['total'], 2, '.', ''));
+
+        // Payable (data item 119)
+        $xml->writeElement('Payable', number_format($adjustments['payable'], 2, '.', ''));
+
+        $xml->endElement(); // Adjustments
     }
 
     private function writeP11DRecord(XMLWriter $xml, P11DEmployee $employee): void

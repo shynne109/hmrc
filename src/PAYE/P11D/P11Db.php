@@ -12,7 +12,9 @@ namespace HMRC\PAYE\P11D;
  * - Class 1A NIC's rate (data item 111, default 15.00%)
  * - Class 1A NIC payable (data item 112)
  * - Adjustments to Class 1A NIC (data items 113-119)
- * - Declaration of P11D inclusion (data item 121)
+ *
+ * Note: The Declaration (data item 121) is handled separately in the parent
+ * ExpensesAndBenefits/Declarations/P11Dincluded element.
  *
  * @package HMRC\PAYE\P11D
  */
@@ -32,9 +34,6 @@ class P11Db
     
     // Adjustments data (Data items 113-119)
     private ?array $adjustments = null;
-    
-    // Declaration (Data item 121)
-    private ?string $declaration = null; // 'are due' or 'are not due'
 
     /**
      * Constructor
@@ -57,9 +56,6 @@ class P11Db
         }
         if (isset($data['adjustments'])) {
             $this->setAdjustments($data['adjustments']);
-        }
-        if (isset($data['declaration'])) {
-            $this->setDeclaration($data['declaration']);
         }
     }
 
@@ -348,31 +344,6 @@ class P11Db
     }
 
     /**
-     * Set Declaration (Data item 121)
-     * Mandatory in Declarations/P11Dincluded
-     * Allowable values: 'are due' or 'are not due'
-     *
-     * @param string $declaration Must be 'are due' or 'are not due'
-     * @return self
-     * @throws \InvalidArgumentException
-     */
-    public function setDeclaration(string $declaration): self
-    {
-        if (!in_array($declaration, ['are due', 'are not due'], true)) {
-            throw new \InvalidArgumentException(
-                "Declaration must be 'are due' or 'are not due'"
-            );
-        }
-        $this->declaration = $declaration;
-        return $this;
-    }
-
-    public function getDeclaration(): ?string
-    {
-        return $this->declaration;
-    }
-
-    /**
      * Check if P11Db has any data
      *
      * @return bool
@@ -382,8 +353,7 @@ class P11Db
         return $this->totalBenefit !== null
             || $this->adjustmentRequired !== null
             || $this->nicPayable !== null
-            || $this->adjustments !== null
-            || $this->declaration !== null;
+            || $this->adjustments !== null;
     }
 
     /**
@@ -408,23 +378,19 @@ class P11Db
             }
 
             // If adjustmentRequired is not set, nicPayable must be present
-            if ($this->adjustmentRequired !== true && $this->nicPayable === null) {
+            if ($this->adjustmentRequired !== true && $this->nicPayable === null && $this->adjustments === null) {
                 throw new \InvalidArgumentException(
-                    'If adjustmentRequired is not set, nicPayable must be present'
+                    'If adjustmentRequired is not set, nicPayable or adjustments must be present'
                 );
             }
-        }
-
-        // Declaration must be set if any Class 1A data is present
-        if ($this->totalBenefit !== null && $this->declaration === null) {
-            // This might be optional depending on context, but good to track
         }
     }
 
     /**
-     * Convert to array for XML serialization
+     * Convert to array for XML serialization (legacy support)
      *
      * @return array
+     * @deprecated Use getter methods directly with P11D::writeP11Db()
      */
     public function toArray(): array
     {
@@ -512,11 +478,32 @@ class P11Db
 
         $data['Class1AcontributionsDue'] = $class1A;
 
-        // Add Declaration if set
-        if ($this->declaration !== null) {
-            $data['Declaration'] = $this->declaration;
-        }
-
         return $data;
+    }
+
+    /**
+     * Calculate NIC payable based on total benefit and NIC rate
+     *
+     * @return float
+     */
+    public function calculateNicPayable(): float
+    {
+        if ($this->totalBenefit === null) {
+            return 0.00;
+        }
+        return round($this->totalBenefit * ($this->nicsRate / 100), 2);
+    }
+
+    /**
+     * Auto-set NIC payable from total benefit and NIC rate
+     *
+     * @return self
+     */
+    public function autoCalculateNicPayable(): self
+    {
+        if ($this->totalBenefit !== null && $this->adjustmentRequired !== true) {
+            $this->nicPayable = $this->calculateNicPayable();
+        }
+        return $this;
     }
 }
