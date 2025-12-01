@@ -520,6 +520,21 @@ class P11D extends GovTalk
             }
 
             switch ($benefitType) {
+                case 'transferred':
+                    $this->writeTransferredSection($xml, $benefitData);
+                    break;
+                case 'payments':
+                    $this->writePaymentsSection($xml, $benefitData);
+                    break;
+                case 'vouchersOrCCs':
+                    $this->writeVouchersOrCCsSection($xml, $benefitData);
+                    break;
+                case 'livingAccom':
+                    $this->writeLivingAccomSection($xml, $benefitData);
+                    break;
+                case 'mileageAllow':
+                    $this->writeMileageAllowSection($xml, $benefitData);
+                    break;
                 case 'cars':
                     $this->writeCarsSection($xml, $benefitData);
                     break;
@@ -529,11 +544,176 @@ class P11D extends GovTalk
                 case 'loans':
                     $this->writeLoansSection($xml, $benefitData);
                     break;
-                // Add other benefit types as needed
+                case 'medical':
+                    $this->writeMedicalSection($xml, $benefitData);
+                    break;
+                case 'relocation':
+                    $this->writeRelocationSection($xml, $benefitData);
+                    break;
+                case 'services':
+                    $this->writeServicesSection($xml, $benefitData);
+                    break;
+                case 'assetsAvail':
+                    $this->writeAssetsAvailSection($xml, $benefitData);
+                    break;
+                case 'other':
+                    $this->writeOtherSection($xml, $benefitData);
+                    break;
+                case 'expPaid':
+                    $this->writeExpPaidSection($xml, $benefitData);
+                    break;
                 default:
                     break;
             }
         }
+    }
+
+    /**
+     * Section A - Assets transferred
+     */
+    private function writeTransferredSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('Transferred');
+        $xml->writeAttribute('Type', 'A');
+
+        // Check if this is a list of assets or a single asset
+        if (isset($data[0]) && is_array($data[0])) {
+            foreach ($data as $asset) {
+                $this->writeTransferredAsset($xml, $asset);
+            }
+        } else {
+            $this->writeTransferredAsset($xml, $data);
+        }
+
+        $xml->endElement(); // Transferred
+    }
+
+    private function writeTransferredAsset(XMLWriter $xml, array $asset): void
+    {
+        $xml->startElement('Asset');
+
+        if (isset($asset['Desc'])) {
+            $xml->writeElement('Desc', $asset['Desc']);
+        }
+
+        if (isset($asset['Other'])) {
+            $xml->writeElement('Other', $asset['Other']);
+        }
+
+        if (isset($asset['CostOrAmtForgone'])) {
+            $xml->writeElement('CostOrAmtForgone', number_format($asset['CostOrAmtForgone'], 2, '.', ''));
+        }
+
+        if (isset($asset['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($asset['MadeGood'], 2, '.', ''));
+        }
+
+        if (isset($asset['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($asset['CashEquivOrRelevantAmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // Asset
+    }
+
+    /**
+     * Section B - Payments made on behalf of employee
+     */
+    private function writePaymentsSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('Payments');
+        $xml->writeAttribute('Type', 'B');
+
+        // Write Payment elements if present
+        if (isset($data['payments']) && is_array($data['payments'])) {
+            foreach ($data['payments'] as $payment) {
+                $this->writePaymentElement($xml, $payment);
+            }
+        } elseif (isset($data[0]) && is_array($data[0])) {
+            foreach ($data as $payment) {
+                $this->writePaymentElement($xml, $payment);
+            }
+        } elseif (isset($data['Desc'])) {
+            $this->writePaymentElement($xml, $data);
+        }
+
+        // Write Tax if present
+        if (isset($data['Tax'])) {
+            $xml->writeElement('Tax', number_format($data['Tax'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // Payments
+    }
+
+    private function writePaymentElement(XMLWriter $xml, array $payment): void
+    {
+        $xml->startElement('Payment');
+
+        if (isset($payment['Desc'])) {
+            $xml->writeElement('Desc', $payment['Desc']);
+        }
+
+        if (isset($payment['Other'])) {
+            $xml->writeElement('Other', $payment['Other']);
+        }
+
+        if (isset($payment['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($payment['CashEquivOrRelevantAmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // Payment
+    }
+
+    /**
+     * Section C - Vouchers and credit cards
+     */
+    private function writeVouchersOrCCsSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('VouchersOrCCs');
+        $xml->writeAttribute('Type', 'C');
+
+        if (isset($data['GrossOrAmtForgone'])) {
+            $xml->writeElement('GrossOrAmtForgone', number_format($data['GrossOrAmtForgone'], 2, '.', ''));
+        }
+
+        if (isset($data['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($data['MadeGood'], 2, '.', ''));
+        }
+
+        if (isset($data['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($data['CashEquivOrRelevantAmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // VouchersOrCCs
+    }
+
+    /**
+     * Section D - Living accommodation
+     */
+    private function writeLivingAccomSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('LivingAccom');
+        $xml->writeAttribute('Type', 'D');
+
+        if (isset($data['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($data['CashEquivOrRelevantAmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // LivingAccom
+    }
+
+    /**
+     * Section E - Mileage allowance
+     */
+    private function writeMileageAllowSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('MileageAllow');
+        $xml->writeAttribute('Type', 'E');
+
+        if (isset($data['TaxablePmt'])) {
+            $xml->writeElement('TaxablePmt', number_format($data['TaxablePmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // MileageAllow
     }
 
     private function writeCarsSection(XMLWriter $xml, array $carsData): void
@@ -675,9 +855,13 @@ class P11D extends GovTalk
         $xml->endElement(); // Vans
     }
 
+    /**
+     * Section H - Interest-free and low interest loans
+     */
     private function writeLoansSection(XMLWriter $xml, array $loansData): void
     {
         $xml->startElement('Loans');
+        $xml->writeAttribute('Type', 'H');
 
         // $loansData is a direct array of loan records from setLoans() or addLoan()
         if (is_array($loansData)) {
@@ -702,47 +886,299 @@ class P11D extends GovTalk
         $xml->endElement(); // Loans
     }
 
+    /**
+     * Write individual loan element matching XSD schema:
+     * Joint, InitOS, FinalOS, MaxOS, IntPaid, Date, Discharge, CashEquivOrRelevantAmt
+     */
     private function writeLoanElement(XMLWriter $xml, array $loan): void
     {
-        if (isset($loan['Joint'])) {
-            $xml->writeElement('Joint', (string)$loan['Joint']);
+        // Joint - Number of joint borrowers (required, 0-999)
+        $xml->writeElement('Joint', (string)($loan['Joint'] ?? 0));
+
+        // InitOS - Initial outstanding balance (required)
+        $xml->writeElement('InitOS', number_format($loan['InitOS'] ?? 0, 2, '.', ''));
+
+        // FinalOS - Final outstanding balance (required)
+        $xml->writeElement('FinalOS', number_format($loan['FinalOS'] ?? 0, 2, '.', ''));
+
+        // MaxOS - Maximum outstanding balance during the year (required)
+        $xml->writeElement('MaxOS', number_format($loan['MaxOS'] ?? 0, 2, '.', ''));
+
+        // IntPaid - Interest paid by the borrower (required)
+        $xml->writeElement('IntPaid', number_format($loan['IntPaid'] ?? 0, 2, '.', ''));
+
+        // Date - Date loan made (optional)
+        if (isset($loan['Date']) && !empty($loan['Date'])) {
+            $xml->writeElement('Date', $loan['Date']);
         }
 
-        if (isset($loan['InitOS'])) {
-            $xml->writeElement('InitOS', number_format($loan['InitOS'], 2, '.', ''));
+        // Discharge - Date loan discharged/waived (optional)
+        if (isset($loan['Discharge']) && !empty($loan['Discharge'])) {
+            $xml->writeElement('Discharge', $loan['Discharge']);
         }
 
-        if (isset($loan['FinalOS'])) {
-            $xml->writeElement('FinalOS', number_format($loan['FinalOS'], 2, '.', ''));
+        // CashEquivOrRelevantAmt - Cash equivalent or relevant amount (required)
+        $xml->writeElement('CashEquivOrRelevantAmt', number_format($loan['CashEquivOrRelevantAmt'] ?? 0, 2, '.', ''));
+    }
+
+    /**
+     * Section I - Medical insurance/treatment
+     */
+    private function writeMedicalSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('Medical');
+        $xml->writeAttribute('Type', 'I');
+
+        if (isset($data['CostOrAmtForgone'])) {
+            $xml->writeElement('CostOrAmtForgone', number_format($data['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($loan['Rate'])) {
-            $xml->writeElement('Rate', number_format($loan['Rate'], 2, '.', ''));
+        if (isset($data['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($data['MadeGood'], 2, '.', ''));
         }
 
-        if (isset($loan['InterestChargedAmt'])) {
-            $xml->writeElement('InterestChargedAmt', number_format($loan['InterestChargedAmt'], 2, '.', ''));
+        if (isset($data['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($data['CashEquivOrRelevantAmt'], 2, '.', ''));
         }
 
-        if (isset($loan['CashEquivOrRelevantAmt'])) {
-            $xml->writeElement('CashEquivOrRelevantAmt', number_format($loan['CashEquivOrRelevantAmt'], 2, '.', ''));
+        $xml->endElement(); // Medical
+    }
+
+    /**
+     * Section J - Qualifying relocation expenses
+     */
+    private function writeRelocationSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('Relocation');
+        $xml->writeAttribute('Type', 'J');
+
+        if (isset($data['Excess'])) {
+            $xml->writeElement('Excess', number_format($data['Excess'], 2, '.', ''));
         }
 
-        // Also support alternate field names
-        if (isset($loan['LoanAmount'])) {
-            $xml->writeElement('LoanAmount', number_format($loan['LoanAmount'], 2, '.', ''));
+        $xml->endElement(); // Relocation
+    }
+
+    /**
+     * Section K - Services supplied
+     */
+    private function writeServicesSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('Services');
+        $xml->writeAttribute('Type', 'K');
+
+        if (isset($data['CostOrAmtForgone'])) {
+            $xml->writeElement('CostOrAmtForgone', number_format($data['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($loan['ReleaseDate'])) {
-            $xml->writeElement('ReleaseDate', $loan['ReleaseDate']);
+        if (isset($data['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($data['MadeGood'], 2, '.', ''));
         }
 
-        if (isset($loan['InterestRate'])) {
-            $xml->writeElement('InterestRate', number_format($loan['InterestRate'], 2, '.', ''));
+        if (isset($data['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($data['CashEquivOrRelevantAmt'], 2, '.', ''));
         }
 
-        if (isset($loan['TaxedBenefit'])) {
-            $xml->writeElement('TaxedBenefit', number_format($loan['TaxedBenefit'], 2, '.', ''));
+        $xml->endElement(); // Services
+    }
+
+    /**
+     * Section L - Assets placed at employee's disposal
+     */
+    private function writeAssetsAvailSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('AssetsAvail');
+        $xml->writeAttribute('Type', 'L');
+
+        // Check if this is a list of assets or a single asset
+        if (isset($data[0]) && is_array($data[0])) {
+            foreach ($data as $asset) {
+                $this->writeAssetsAvailAsset($xml, $asset);
+            }
+        } else {
+            $this->writeAssetsAvailAsset($xml, $data);
+        }
+
+        $xml->endElement(); // AssetsAvail
+    }
+
+    private function writeAssetsAvailAsset(XMLWriter $xml, array $asset): void
+    {
+        $xml->startElement('Asset');
+
+        if (isset($asset['Desc'])) {
+            $xml->writeElement('Desc', $asset['Desc']);
+        }
+
+        if (isset($asset['Other'])) {
+            $xml->writeElement('Other', $asset['Other']);
+        }
+
+        if (isset($asset['AnnValProRata'])) {
+            $xml->writeElement('AnnValProRata', number_format($asset['AnnValProRata'], 2, '.', ''));
+        }
+
+        if (isset($asset['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($asset['MadeGood'], 2, '.', ''));
+        }
+
+        if (isset($asset['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($asset['CashEquivOrRelevantAmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // Asset
+    }
+
+    /**
+     * Section M - Other items
+     */
+    private function writeOtherSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('Other');
+        $xml->writeAttribute('Type', 'M');
+
+        // Write Class1A items
+        if (isset($data['Class1A'])) {
+            $class1AItems = is_array($data['Class1A'][0] ?? null) ? $data['Class1A'] : [$data['Class1A']];
+            foreach ($class1AItems as $item) {
+                $this->writeOtherClass1AItem($xml, $item);
+            }
+        }
+
+        // Write NonClass1A items
+        if (isset($data['NonClass1A'])) {
+            $nonClass1AItems = is_array($data['NonClass1A'][0] ?? null) ? $data['NonClass1A'] : [$data['NonClass1A']];
+            foreach ($nonClass1AItems as $item) {
+                $this->writeOtherNonClass1AItem($xml, $item);
+            }
+        }
+
+        // Write TaxPaid if present
+        if (isset($data['TaxPaid'])) {
+            $xml->writeElement('TaxPaid', number_format($data['TaxPaid'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // Other
+    }
+
+    private function writeOtherClass1AItem(XMLWriter $xml, array $item): void
+    {
+        $xml->startElement('Class1A');
+
+        if (isset($item['Desc'])) {
+            $xml->writeElement('Desc', $item['Desc']);
+        }
+
+        if (isset($item['Other'])) {
+            $xml->writeElement('Other', $item['Other']);
+        }
+
+        if (isset($item['CostOrAmtForgone'])) {
+            $xml->writeElement('CostOrAmtForgone', number_format($item['CostOrAmtForgone'], 2, '.', ''));
+        }
+
+        if (isset($item['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($item['MadeGood'], 2, '.', ''));
+        }
+
+        if (isset($item['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($item['CashEquivOrRelevantAmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // Class1A
+    }
+
+    private function writeOtherNonClass1AItem(XMLWriter $xml, array $item): void
+    {
+        $xml->startElement('NonClass1A');
+
+        if (isset($item['Desc'])) {
+            $xml->writeElement('Desc', $item['Desc']);
+        }
+
+        if (isset($item['Other'])) {
+            $xml->writeElement('Other', $item['Other']);
+        }
+
+        if (isset($item['CostOrAmtForgone'])) {
+            $xml->writeElement('CostOrAmtForgone', number_format($item['CostOrAmtForgone'], 2, '.', ''));
+        }
+
+        if (isset($item['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($item['MadeGood'], 2, '.', ''));
+        }
+
+        if (isset($item['CashEquivOrRelevantAmt'])) {
+            $xml->writeElement('CashEquivOrRelevantAmt', number_format($item['CashEquivOrRelevantAmt'], 2, '.', ''));
+        }
+
+        $xml->endElement(); // NonClass1A
+    }
+
+    /**
+     * Section N - Expenses payments made to, or on behalf of, the employee
+     */
+    private function writeExpPaidSection(XMLWriter $xml, array $data): void
+    {
+        $xml->startElement('ExpPaid');
+        $xml->writeAttribute('Type', 'N');
+
+        // TravAndSub - Travelling and subsistence
+        if (isset($data['TravAndSub'])) {
+            $xml->startElement('TravAndSub');
+            $this->writeExpPaidSubElement($xml, $data['TravAndSub']);
+            $xml->endElement();
+        }
+
+        // Ent - Entertainment
+        if (isset($data['Ent'])) {
+            $xml->startElement('Ent');
+            if (isset($data['Ent']['TradingOrgInd'])) {
+                $xml->writeAttribute('TradingOrgInd', $data['Ent']['TradingOrgInd']);
+            }
+            $this->writeExpPaidSubElement($xml, $data['Ent']);
+            $xml->endElement();
+        }
+
+        // HomeTel - Home telephone
+        if (isset($data['HomeTel'])) {
+            $xml->startElement('HomeTel');
+            $this->writeExpPaidSubElement($xml, $data['HomeTel']);
+            $xml->endElement();
+        }
+
+        // NonQualRel - Non-qualifying relocation benefits
+        if (isset($data['NonQualRel'])) {
+            $xml->startElement('NonQualRel');
+            $this->writeExpPaidSubElement($xml, $data['NonQualRel']);
+            $xml->endElement();
+        }
+
+        // Other - Other expenses
+        if (isset($data['Other'])) {
+            $xml->startElement('Other');
+            if (isset($data['Other']['Desc'])) {
+                $xml->writeElement('Desc', $data['Other']['Desc']);
+            }
+            $this->writeExpPaidSubElement($xml, $data['Other']);
+            $xml->endElement();
+        }
+
+        $xml->endElement(); // ExpPaid
+    }
+
+    private function writeExpPaidSubElement(XMLWriter $xml, array $item): void
+    {
+        if (isset($item['CostOrAmtForgone'])) {
+            $xml->writeElement('CostOrAmtForgone', number_format($item['CostOrAmtForgone'], 2, '.', ''));
+        }
+
+        if (isset($item['MadeGood'])) {
+            $xml->writeElement('MadeGood', number_format($item['MadeGood'], 2, '.', ''));
+        }
+
+        if (isset($item['TaxablePmtOrRelevantAmt'])) {
+            $xml->writeElement('TaxablePmtOrRelevantAmt', number_format($item['TaxablePmtOrRelevantAmt'], 2, '.', ''));
         }
     }
 

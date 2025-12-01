@@ -1082,7 +1082,7 @@ class GovTalk implements LoggerAwareInterface
      *     The class used when the request which generated the correlation ID was sent to the gateway.
      * @return boolean True if message was successfully deleted from the gateway, false otherwise.
      */
-    public function sendDeleteRequest($correlationId = null, $messageClass = null, $qualifier = 'request')
+    public function sendDeleteRequest($correlationId = null, $messageClass = null, $qualifier = 'poll')
     {
         if (($correlationId !== null) && ($messageClass !== null)) {
             if (preg_match('/[0-9A-F]{0,32}/', $correlationId)) {
