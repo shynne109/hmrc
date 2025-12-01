@@ -790,6 +790,11 @@ class P11D extends GovTalk
             $xml->writeElement('List', number_format($car['List'], 2, '.', ''));
         }
 
+        //NoAppCO2Fig
+        if (isset($car['NoAppCO2Fig'])) {
+            $xml->writeElement('NoAppCO2Fig', 'yes');
+        }
+
         if (isset($car['Accs'])) {
             $xml->writeElement('Accs', number_format($car['Accs'], 2, '.', ''));
         }
@@ -800,6 +805,15 @@ class P11D extends GovTalk
 
         if (isset($car['PrivUsePmt'])) {
             $xml->writeElement('PrivUsePmt', number_format($car['PrivUsePmt'], 2, '.', ''));
+        }
+
+        // FuelWithdrawn
+        if (isset($car['FuelWithdrawn'])) {
+            $xml->writeElement('FuelWithdrawn', $car['FuelWithdrawn']);
+            // Reinstated
+            if (isset($car['Reinstated'])) {
+                $xml->writeAttribute('Reinstated', 'yes');
+            }
         }
 
         if (isset($car['CashEquivOrRelevantAmt'])) {
