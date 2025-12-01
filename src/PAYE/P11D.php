@@ -733,6 +733,29 @@ class P11D extends GovTalk
                         $xml->endElement(); // Car
                     }
                 }
+                // Calculate totals from the car list
+                $totalCars = 0;
+                $totalFuel = 0;
+                foreach ($carsData as $car) {
+                    if (isset($car['CashEquivOrRelevantAmt'])) {
+                        $totalCars += $car['CashEquivOrRelevantAmt'];
+                    } elseif (isset($car['CashEquivalent'])) {
+                        $totalCars += $car['CashEquivalent'];
+                    }
+                    if (isset($car['FuelCashEquivOrRelevantAmt'])) {
+                        $totalFuel += $car['FuelCashEquivOrRelevantAmt'];
+                    }
+                }
+
+                // Write totals if any cars were processed
+                if (count($carsData) > 0) {
+                    if ($totalCars > 0) {
+                        $xml->writeElement('TotalCarsOrRelevantAmt', number_format($totalCars, 2, '.', ''));
+                    }
+                    if ($totalFuel > 0) {
+                        $xml->writeElement('TotalFuelOrRelevantAmt', number_format($totalFuel, 2, '.', ''));
+                    }
+                }
             } elseif (isset($carsData['Make']) || isset($carsData['totalCars'])) {
                 // Single car data mixed with totals
                 $xml->startElement('Car');
@@ -741,10 +764,20 @@ class P11D extends GovTalk
                 
                 if (isset($carsData['totalCars'])) {
                     $xml->writeElement('TotalCarsOrRelevantAmt', number_format($carsData['totalCars'], 2, '.', ''));
+                }else{
+                    if (isset($carsData['CashEquivOrRelevantAmt'])) {
+                        $xml->writeElement('TotalCarsOrRelevantAmt', number_format($carsData['CashEquivOrRelevantAmt'], 2, '.', ''));
+                    } elseif (isset($carsData['CashEquivalent'])) {
+                        $xml->writeElement('TotalCarsOrRelevantAmt', number_format($carsData['CashEquivalent'], 2, '.', ''));
+                    }
                 }
 
                 if (isset($carsData['totalFuel'])) {
                     $xml->writeElement('TotalFuelOrRelevantAmt', number_format($carsData['totalFuel'], 2, '.', ''));
+                }else{
+                    if (isset($carsData['FuelCashEquivOrRelevantAmt'])) {
+                        $xml->writeElement('TotalFuelOrRelevantAmt', number_format($carsData['FuelCashEquivOrRelevantAmt'], 2, '.', ''));
+                    }
                 }
             }
         }
@@ -754,61 +787,62 @@ class P11D extends GovTalk
 
     private function writeCarElement(XMLWriter $xml, array $car): void
     {
-        if (isset($car['Make'])) {
+        if (filled($car['Make'] ?? null)) {
             $xml->writeElement('Make', $car['Make']);
         }
 
-        if (isset($car['Registered'])) {
+        if (filled($car['Registered'] ?? null)) {
             $xml->writeElement('Registered', $car['Registered']);
         }
 
-        if (isset($car['AvailFrom'])) {
+        if (filled($car['AvailFrom'] ?? null)) {
             $xml->writeElement('AvailFrom', $car['AvailFrom']);
         }
 
-        if (isset($car['AvailTo'])) {
+        if (filled($car['AvailTo'] ?? null)) {
             $xml->writeElement('AvailTo', $car['AvailTo']);
         }
 
-        if (isset($car['CC'])) {
+        if (filled($car['CC'] ?? null)) {
             $xml->writeElement('CC', (string)$car['CC']);
         }
 
-        if (isset($car['Fuel'])) {
+        if (filled($car['Fuel'] ?? null)) {
             $xml->writeElement('Fuel', $car['Fuel']);
         }
 
-        if (isset($car['CO2'])) {
+        if (filled($car['CO2'] ?? null)) {
             $xml->writeElement('CO2', (string)$car['CO2']);
         }
 
-        if (isset($car['ZeroEmissionMileage'])) {
+        if (filled($car['ZeroEmissionMileage'] ?? null)) {
             $xml->writeElement('ZeroEmissionMileage', (string)$car['ZeroEmissionMileage']);
         }
 
-        if (isset($car['List'])) {
-            $xml->writeElement('List', number_format($car['List'], 2, '.', ''));
-        }
-
-        //NoAppCO2Fig
-        if (isset($car['NoAppCO2Fig'])) {
+        if (filled($car['NoAppCO2Fig'] ?? null)) {
             $xml->writeElement('NoAppCO2Fig', 'yes');
         }
 
-        if (isset($car['Accs'])) {
+        if (filled($car['List'] ?? null)) {
+            $xml->writeElement('List', number_format($car['List'], 2, '.', ''));
+        }
+
+        
+
+        if (filled($car['Accs'] ?? null)) {
             $xml->writeElement('Accs', number_format($car['Accs'], 2, '.', ''));
         }
 
-        if (isset($car['CapCont'])) {
+        if (filled($car['CapCont'] ?? null)) {
             $xml->writeElement('CapCont', number_format($car['CapCont'], 2, '.', ''));
         }
 
-        if (isset($car['PrivUsePmt'])) {
+        if (filled($car['PrivUsePmt'] ?? null)) {
             $xml->writeElement('PrivUsePmt', number_format($car['PrivUsePmt'], 2, '.', ''));
         }
 
         // FuelWithdrawn
-        if (isset($car['FuelWithdrawn'])) {
+        if (filled($car['FuelWithdrawn'] ?? null)) {
             $xml->writeElement('FuelWithdrawn', $car['FuelWithdrawn']);
             // Reinstated
             if (isset($car['Reinstated'])) {
@@ -816,14 +850,14 @@ class P11D extends GovTalk
             }
         }
 
-        if (isset($car['CashEquivOrRelevantAmt'])) {
+        if (filled($car['CashEquivOrRelevantAmt'] ?? null)) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($car['CashEquivOrRelevantAmt'], 2, '.', ''));
-        } elseif (isset($car['CashEquivalent'])) {
+        } elseif (filled($car['CashEquivalent'] ?? null)) {
             // Also support 'CashEquivalent' as an alias for backwards compatibility
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($car['CashEquivalent'], 2, '.', ''));
         }
 
-        if (isset($car['FuelCashEquivOrRelevantAmt'])) {
+        if (filled($car['FuelCashEquivOrRelevantAmt'] ?? null)) {
             $xml->writeElement('FuelCashEquivOrRelevantAmt', number_format($car['FuelCashEquivOrRelevantAmt'], 2, '.', ''));
         }
     }
