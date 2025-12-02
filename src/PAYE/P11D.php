@@ -1500,5 +1500,48 @@ class P11D extends GovTalk
         ];
     }
 
+    /**
+     * Withdraw a previously submitted P11D/P11D(b) that has not yet been processed.
+     * 
+     * IMPORTANT: This only works for submissions that have NOT yet been processed
+     * by HMRC's back-end system. Once processed, you cannot withdraw - instead
+     * you must submit amended P11D forms.
+     * 
+     * @param string $correlationId The Correlation ID returned when the original P11D was submitted
+     * @param string $reason The reason for withdrawing (e.g., "Duplicate submission", "Incorrect benefit values")
+     * @return array Result with success status, correlation IDs, request/response XML, and any errors
+     * 
+     * @example
+     * ```php
+     * // Submit a P11D
+     * $result = $p11d->submit();
+     * $originalCorrelationId = $result['correlation_id'];
+     * 
+     * // Later, if you need to withdraw it (before processing)
+     * $withdrawResult = $p11d->withdrawSubmission(
+     *     $originalCorrelationId,
+     *     'Incorrect car benefit values reported'
+     * );
+     * 
+     * if ($withdrawResult['success']) {
+     *     echo "P11D successfully withdrawn\n";
+     * } else {
+     *     echo "Withdrawal failed: " . print_r($withdrawResult['errors'], true);
+     * }
+     * ```
+     */
+    public function withdrawSubmission(string $correlationId, string $reason): array
+    {
+        $agentId = null;
+        if ($this->agentDetails !== null) {
+            $agentId = $this->agentDetails->getAgentId();
+        }
 
+        return $this->sendWithdrawalRequest(
+            $correlationId,
+            $reason,
+            $agentId,
+            self::MESSAGE_CLASS
+        );
+    }
 }

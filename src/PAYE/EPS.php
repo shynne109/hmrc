@@ -699,4 +699,50 @@ class EPS extends GovTalk
             'correlation_id' => $this->getResponseCorrelationId(),
         ];
     }
+
+    /**
+     * Withdraw a previously submitted EPS that has not yet been processed.
+     * 
+     * IMPORTANT: This only works for submissions that have NOT yet been processed
+     * by HMRC's back-end system. Once processed, you cannot withdraw - instead:
+     * - For current tax year: Submit a corrected EPS with updated figures
+     * - For previous tax year: Submit an Earlier Year Update (EYU)
+     * 
+     * @param string $correlationId The Correlation ID returned when the original EPS was submitted
+     * @param string $reason The reason for withdrawing (e.g., "Duplicate submission", "Incorrect data")
+     * @return array Result with success status, correlation IDs, request/response XML, and any errors
+     * 
+     * @example
+     * ```php
+     * // Submit an EPS
+     * $result = $eps->submit();
+     * $originalCorrelationId = $result['correlation_id'];
+     * 
+     * // Later, if you need to withdraw it (before processing)
+     * $withdrawResult = $eps->withdrawSubmission(
+     *     $originalCorrelationId,
+     *     'Incorrect recoverable amounts reported'
+     * );
+     * 
+     * if ($withdrawResult['success']) {
+     *     echo "EPS successfully withdrawn\n";
+     * } else {
+     *     echo "Withdrawal failed: " . print_r($withdrawResult['errors'], true);
+     * }
+     * ```
+     */
+    public function withdrawSubmission(string $correlationId, string $reason): array
+    {
+        $agentId = null;
+        if ($this->agentDetails !== null) {
+            $agentId = $this->agentDetails->getAgentId();
+        }
+
+        return $this->sendWithdrawalRequest(
+            $correlationId,
+            $reason,
+            $agentId,
+            self::MESSAGE_CLASS
+        );
+    }
 }

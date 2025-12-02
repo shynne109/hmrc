@@ -1075,12 +1075,17 @@ class GovTalk implements LoggerAwareInterface
      * Sends a generic delete request. By default the request refers to the last
      * stored correlation ID and class, but this behaviour can be over-ridden by
      * providing both correlation ID and class to the method.
+     * 
+     * NOTE: For HMRC RTI submissions (FPS, EPS), use sendWithdrawalRequest() instead.
+     * HMRC RTI does not support the generic "delete" function - you must use the
+     * Withdrawal message type to cancel unprocessed submissions.
      *
      * @param string $govTalkServer The GovTalk server to send the delete request to. May be skipped with a null value.
      * @param string $correlationId The correlation ID to be deleted.
      * @param string $messageClass
      *     The class used when the request which generated the correlation ID was sent to the gateway.
      * @return boolean True if message was successfully deleted from the gateway, false otherwise.
+     * @deprecated For HMRC RTI, use sendWithdrawalRequest() instead
      */
     public function sendDeleteRequest($correlationId = null, $messageClass = null, $qualifier = 'poll')
     {
@@ -1121,6 +1126,120 @@ class GovTalk implements LoggerAwareInterface
 
         return $returnable;
         
+    }
+
+    /**
+     * Sends an HMRC RTI Withdrawal Request to cancel a previously submitted message.
+     * 
+     * This is the correct method for withdrawing HMRC RTI submissions (FPS, EPS, etc.)
+     * that have been transmitted but not yet processed by the HMRC back-end system.
+     * 
+     * IMPORTANT HMRC RTI Correction Rules:
+     * - To correct/delete an FPS or EPS in the CURRENT tax year: Submit a new FPS/EPS 
+     *   with corrected Year-to-Date (YTD) figures. The latest submission overwrites previous.
+     * - To correct submissions for a PREVIOUS tax year: Use an Earlier Year Update (EYU).
+     * - Withdrawal requests only work for messages that have NOT yet been processed.
+     * 
+     * @param string $correlationId The Correlation ID of the original message to withdraw
+     * @param string $reason The reason for the withdrawal (e.g., "Duplicate FPS submission")
+     * @param string|null $agentId Optional Agent Reference ID (if submitting as an agent)
+     * @param string|null $messageClass The message class (defaults to last used class)
+     * @return array Result array with success status, correlation_id, request/response XML, errors
+     */
+    public function sendWithdrawalRequest(
+        string $correlationId,
+        string $reason,
+        ?string $agentId = null,
+        ?string $messageClass = null
+    ): array {
+        // Validate correlation ID format
+        if (!preg_match('/^[0-9A-Fa-f-]{1,64}$/', $correlationId)) {
+            return [
+                'success' => false,
+                'errors' => [['code' => 'INVALID_CORRELATION_ID', 'message' => 'Invalid correlation ID format']],
+            ];
+        }
+
+        // Use provided message class or default to stored one
+        if ($messageClass === null) {
+            $messageClass = $this->messageClass ?? 'HMRC-PAYE-RTI-FPS';
+        }
+
+        // Build the Withdrawal XML body
+        $withdrawalBody = $this->buildWithdrawalBody($correlationId, $reason, $agentId);
+
+        // Configure the message
+        $this->setMessageClass($messageClass);
+        $this->setMessageQualifier('request');
+        $this->setMessageFunction('submit');
+        $this->setMessageCorrelationId(''); // New request, no correlation ID
+        $this->setMessageBody($withdrawalBody);
+
+        // Send the message
+        $success = $this->sendMessage();
+        
+        $returnable = [
+            'success' => $success && ($this->responseHasErrors() === false),
+            'correlation_id' => $this->getResponseCorrelationId(),
+            'original_correlation_id' => $correlationId,
+            'request_xml' => $this->getFullXMLRequest(),
+            'response_xml' => $this->getFullXMLResponse(),
+            'qualifier' => $this->getResponseQualifier(),
+            'errors' => $this->getResponseErrors() ?: [],
+        ];
+
+        if ($success && !$this->responseHasErrors()) {
+            $returnable['endpoint'] = $this->getResponseEndpoint();
+            $this->logger->info("Withdrawal request sent successfully", [
+                'correlation_id' => $correlationId,
+                'reason' => $reason,
+            ]);
+        } else {
+            $this->logger->error("Withdrawal request failed", [
+                'correlation_id' => $correlationId,
+                'errors' => $returnable['errors'],
+            ]);
+        }
+
+        return $returnable;
+    }
+
+    /**
+     * Build the XML body for a Withdrawal request
+     * 
+     * @param string $correlationId The correlation ID of the message to withdraw
+     * @param string $reason The reason for withdrawal
+     * @param string|null $agentId Optional agent reference
+     * @return string XML string for the withdrawal body
+     */
+    protected function buildWithdrawalBody(
+        string $correlationId,
+        string $reason,
+        ?string $agentId = null
+    ): string {
+        $xml = new XMLWriter();
+        $xml->openMemory();
+        $xml->setIndent(true);
+
+        $xml->startElement('Withdrawal');
+        $xml->writeAttribute('xmlns', 'http://www.govtalk.gov.uk/taxation/it/withdrawal/v2/1');
+
+        // Agent ID (optional - only if submitting as an agent)
+        if ($agentId !== null && $agentId !== '') {
+            $xml->writeElement('AgentID', $agentId);
+        }
+
+        // Message Correlation ID - the ID of the submission to withdraw
+        $xml->startElement('MessageCorrelationID');
+        $xml->writeElement('CorrelationID', $correlationId);
+        $xml->endElement(); // MessageCorrelationID
+
+        // Reason for withdrawal
+        $xml->writeElement('Reason', $reason);
+
+        $xml->endElement(); // Withdrawal
+
+        return $xml->outputMemory();
     }
 
     /**
