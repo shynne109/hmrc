@@ -307,6 +307,8 @@ class P11D extends GovTalk
         $xml->endElement();
         $xml->writeElement('Sender', $this->senderType);
         $xml->endElement(); // IRheader
+
+        
        
         // Build ExpensesAndBenefits
         $this->buildExpensesAndBenefits($xml);
@@ -320,6 +322,8 @@ class P11D extends GovTalk
     private function buildExpensesAndBenefits(XMLWriter $xml): void
     {
         $xml->startElement('ExpensesAndBenefits');
+
+        $xml->writeElement('RelatedTaxYear', $this->relatedTaxYear);
 
         // Employer
         $xml->startElement('Employer');
