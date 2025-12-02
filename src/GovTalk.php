@@ -1147,18 +1147,38 @@ class GovTalk implements LoggerAwareInterface
      * @return array Result array with success status, correlation_id, request/response XML, errors
      */
     public function sendWithdrawalRequest(
-        string $correlationId,
-        string $reason,
+        $correlationId = null,
+        $reason = "",
         ?string $agentId = null,
         ?string $messageClass = null
     ): array {
         // Validate correlation ID format
-        if (!preg_match('/^[0-9A-Fa-f-]{1,64}$/', $correlationId)) {
-            return [
-                'success' => false,
-                'errors' => [['code' => 'INVALID_CORRELATION_ID', 'message' => 'Invalid correlation ID format']],
-            ];
+        if (($correlationId !== null) && ($messageClass !== null)) {
+            if (preg_match('/[0-9A-F]{0,32}/', $correlationId)) {
+                $correlationId = $correlationId;
+                $messageClass = $messageClass;
+            } else {
+                return [
+                    'success' => false,
+                    'errors' => [['code' => 'INVALID_CORRELATION_ID', 'message' => 'Invalid correlation ID format']],
+                ];
+            }
+        } else {
+            if ($correlationId = $this->getResponseCorrelationId()) {
+                $messageClass = $this->messageClass;
+            } else {
+                return [
+                    'success' => false,
+                    'errors' => [['code' => 'INVALID_CORRELATION_ID', 'message' => 'Invalid correlation ID format']],
+                ];
+            }
         }
+
+        // generate default reasons
+        if ($reason === "") {
+            $reason = "Withdrawal requested for correlation ID " . $correlationId;
+        }
+       
 
         // Use provided message class or default to stored one
         if ($messageClass === null) {
