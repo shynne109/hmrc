@@ -1175,7 +1175,7 @@ class GovTalk implements LoggerAwareInterface
         }
 
         // generate default reasons
-        if ($reason === "") {
+        if ($reason == null || $reason == '') {
             $reason = "Withdrawal requested for correlation ID " . $correlationId;
         }
        
