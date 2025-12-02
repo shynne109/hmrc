@@ -144,48 +144,180 @@ $p11Db = new P11Db([
 $p11d->setP11Db($p11Db);
 
 // ============================================================================
-// Example 4: P46 Car Submission - New Car Declaration
+// Example 4: P46 Car Submission - New Car Declaration (Full XSD compliant)
 // ============================================================================
 
 $p46CarNew = new P46Car([
+    // Employee Details
     'forename' => 'David',
+    'forename2' => 'James',
     'surname' => 'Johnson',
+    'title' => 'Mr',
     'nino' => 'AB111111A',
-    'worksNo' => 'EMP002',
-    'submissionReason' => 'New',     // Options: New, Amendment, Cessation
-    'carDetails' => [
-        'Make' => 'Audi A4',
-        'Registered' => '2025-06-01',
-    ],
+    'birthDate' => '1985-03-15',
+    'gender' => 'male',
+    
+    // Submission Reason
+    'providedCar' => true,          // New car provided to employee
+    'secondCar' => false,           // Not a second car
+    'director' => false,            // Employee is not a director
+    
+    // Car Details
+    'makeAndModel' => 'Audi A4 2.0 TDI',
+    'engineSize' => 1968,
+    'engineSizeCategory' => 2,       // 1401-2000cc
+    'dateFirstRegistered' => '2025-06-01',
+    'fuelType' => 'F',               // Diesel Euro 6d
+    
+    // CO2 Emissions
     'co2Emissions' => 120,
-    'co2RelatedFuel' => 'D',
-    'listPrice' => 35000.00,
-    'capitalContribution' => 2500.00,
-    'privateUsePayment' => 300.00,
+    'zeroEmissionMileage' => 0,      // Not a hybrid
+    
+    // Monetary Details
+    'carPrice' => 35000,
+    'accessoriesPrice' => 1500,
+    'dateFirstAvailable' => '2025-06-01',
+    'capitalContributions' => 2500,
+    'privateUsePayment' => 300,
+    'privateUsePaymentInterval' => 'M', // Monthly
+    
+    // Fuel
+    'fuelPrivateUse' => true,
+    'fuelPaidByEmployee' => false,
 ]);
 
 $p11d->addP46Car($p46CarNew);
 
 // ============================================================================
-// Example 5: P46 Car Submission - Amendment to Existing Car
+// Example 5: P46 Car Submission - Car Withdrawn (Cessation)
 // ============================================================================
 
-$p46CarAmend = new P46Car([
+$p46CarWithdrawn = new P46Car([
     'forename' => 'Sarah',
     'surname' => 'Williams',
     'nino' => 'CD222222D',
-    'submissionReason' => 'Amendment',
-    'carDetails' => [
-        'Make' => 'Mercedes C-Class',
-        'Registered' => '2024-03-15',
-    ],
-    'privateUsePayment' => 400.00,   // Updated payment
+    
+    // Car Withdrawn details
+    'carWithdrawn' => true,
+    'carWithdrawnDate' => '2025-03-31',
+    'carWithdrawnMakeAndModel' => 'Mercedes C-Class',
+    'carWithdrawnEngineSize' => 1991,
+    'carWithdrawnEngineSizeCategory' => 2, // 1401-2000cc
+    
+    // Monetary Details still required
+    'carPrice' => 42000,
+    'dateFirstAvailable' => '2024-01-01',
+    'capitalContributions' => 0,
+    
+    // Fuel ceased
+    'fuelPrivateUse' => false,
 ]);
 
-$p11d->addP46Car($p46CarAmend);
+$p11d->addP46Car($p46CarWithdrawn);
 
 // ============================================================================
-// Example 6: Build and Submit P11D
+// Example 6: P46 Car Submission - Replacement Car
+// ============================================================================
+
+$p46CarReplacement = new P46Car([
+    'forename' => 'Michael',
+    'surname' => 'Brown',
+    'nino' => 'EF333333F',
+    
+    // Replacement car details
+    'providedCar' => true,
+    'replacedCar' => true,
+    'replacedCarMultipleIndicator' => false,
+    'replacedCarMakeAndModel' => 'BMW 320d',
+    'replacedCarEngineSize' => 1995,
+    'replacedCarEngineSizeCategory' => 2,
+    
+    // New car details
+    'makeAndModel' => 'BMW 530e',
+    'engineSize' => 1998,
+    'engineSizeCategory' => 2,
+    'dateFirstRegistered' => '2025-04-01',
+    'fuelType' => 'A',  // Hybrid (not pure diesel)
+    
+    // CO2 with zero emission range
+    'co2Emissions' => 36,
+    'zeroEmissionMileage' => 54,  // PHEV range
+    
+    // Monetary
+    'carPrice' => 55000,
+    'dateFirstAvailable' => '2025-04-01',
+    'capitalContributions' => 5000,
+    
+    // Fuel
+    'fuelPrivateUse' => true,
+    'fuelPaidByEmployee' => true,  // Employee pays for fuel
+]);
+
+$p11d->addP46Car($p46CarReplacement);
+
+// ============================================================================
+// Example 7: P46 Car - Pre-1998 Car (no CO2 emissions figure)
+// ============================================================================
+
+$p46CarClassic = new P46Car([
+    'forename' => 'Robert',
+    'surname' => 'Thompson',
+    'nino' => 'GH444444G',
+    
+    'providedCar' => true,
+    'director' => true,
+    
+    'makeAndModel' => 'Jaguar XJ6',
+    'engineSize' => 3590,
+    'engineSizeCategory' => 3,  // 2001cc or more
+    'dateFirstRegistered' => '1995-07-15',
+    'fuelType' => 'A',
+    
+    // Pre-1998 car - no CO2 emissions figure
+    'co2Before1998' => true,
+    
+    'carPrice' => 25000,
+    'dateFirstAvailable' => '2025-01-01',
+    'capitalContributions' => 0,
+    
+    'fuelPrivateUse' => true,
+]);
+
+$p11d->addP46Car($p46CarClassic);
+
+// ============================================================================
+// Example 8: P46 Car - Electric Car (No engine)
+// ============================================================================
+
+$p46CarElectric = new P46Car([
+    'forename' => 'Emma',
+    'surname' => 'Davis',
+    'nino' => 'JK555555J',
+    
+    'providedCar' => true,
+    'secondCar' => true,  // This is a second company car
+    
+    'makeAndModel' => 'Tesla Model 3',
+    'engineSize' => 0,
+    'engineSizeCategory' => 4,  // No engine (electric)
+    'dateFirstRegistered' => '2025-02-01',
+    'fuelType' => 'A',  // All other (electric)
+    
+    'co2Emissions' => 0,
+    'zeroEmissionMileage' => 350,  // Full electric range
+    
+    'carPrice' => 45000,
+    'dateFirstAvailable' => '2025-02-01',
+    'capitalContributions' => 0,
+    
+    // No fuel benefit for electric cars charged at work
+    'fuelPrivateUse' => false,
+]);
+
+$p11d->addP46Car($p46CarElectric);
+
+// ============================================================================
+// Example 9: Build and Submit P11D
 // ============================================================================
 
 try {

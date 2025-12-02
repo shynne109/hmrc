@@ -1243,44 +1243,8 @@ class P11D extends GovTalk
 
     private function writeP46CarRecord(XMLWriter $xml, P46Car $car): void
     {
-        $xml->startElement('P46Car');
-
-        $data = $car->toArray();
-
-        // Write EmployeeDetails
-        if (isset($data['EmployeeDetails'])) {
-            $xml->startElement('EmployeeDetails');
-
-            if (isset($data['EmployeeDetails']['Name'])) {
-                $this->writeName($xml, $data['EmployeeDetails']['Name']);
-            }
-
-            if (isset($data['EmployeeDetails']['NINO'])) {
-                $xml->writeElement('NINO', $data['EmployeeDetails']['NINO']);
-            }
-
-            if (isset($data['EmployeeDetails']['WksNo'])) {
-                $xml->writeElement('WksNo', $data['EmployeeDetails']['WksNo']);
-            }
-
-            $xml->endElement(); // EmployeeDetails
-        }
-
-        // Write other P46Car elements
-        if (isset($data['SubmissionReason'])) {
-            if (is_array($data['SubmissionReason'])) {
-                $xml->startElement('SubmissionReason');
-                $xml->writeAttribute('Type', $data['SubmissionReason']['Type']);
-                if (isset($data['SubmissionReason']['Date'])) {
-                    $xml->text($data['SubmissionReason']['Date']);
-                }
-                $xml->endElement();
-            } else {
-                $xml->writeElement('SubmissionReason', $data['SubmissionReason']);
-            }
-        }
-
-        $xml->endElement(); // P46Car
+        // Use the P46Car's writeXml method for full XSD compliance
+        $car->writeXml($xml);
     }
 
     private function writeName(XMLWriter $xml, array $nameData): void
