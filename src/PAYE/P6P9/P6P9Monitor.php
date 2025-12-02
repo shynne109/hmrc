@@ -1,6 +1,6 @@
 <?php
 
-namespace HMRC\PAYE;
+namespace HMRC\PAYE\P6P9;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;

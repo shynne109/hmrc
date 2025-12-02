@@ -6,13 +6,13 @@
  * This file demonstrates various ways to use the P6/P9 monitoring system
  */
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 // Example 1: Email Parsing (Recommended Method)
 // ============================================
 
-use HMRC\PAYE\P6P9Monitor;
-use HMRC\PAYE\P6P9EmailParser;
+use HMRC\PAYE\P6P9\P6P9Monitor;
+use HMRC\PAYE\P6P9\P6P9EmailParser;
 use Psr\Log\NullLogger;
 
 echo "Example 1: Check P6/P9 via Email Parsing\n";
