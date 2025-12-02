@@ -1140,15 +1140,15 @@ class GovTalk implements LoggerAwareInterface
      * - To correct submissions for a PREVIOUS tax year: Use an Earlier Year Update (EYU).
      * - Withdrawal requests only work for messages that have NOT yet been processed.
      * 
-     * @param string $correlationId The Correlation ID of the original message to withdraw
-     * @param string $reason The reason for the withdrawal (e.g., "Duplicate FPS submission")
+     * @param string|null $correlationId The Correlation ID of the original message to withdraw
+     * @param string|null $reason The reason for the withdrawal (e.g., "Duplicate FPS submission")
      * @param string|null $agentId Optional Agent Reference ID (if submitting as an agent)
      * @param string|null $messageClass The message class (defaults to last used class)
      * @return array Result array with success status, correlation_id, request/response XML, errors
      */
     public function sendWithdrawalRequest(
-        $correlationId = null,
-        $reason = "",
+        ?string $correlationId = null,
+        ?string $reason = null,
         ?string $agentId = null,
         ?string $messageClass = null
     ): array {
