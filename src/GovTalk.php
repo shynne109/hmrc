@@ -375,6 +375,250 @@ class GovTalk implements LoggerAwareInterface
         }
     }
 
+    /**
+     * Write the full request and response XML to a file.
+     * 
+     * Creates a formatted file containing both the request XML sent to HMRC
+     * and the response XML received, with timestamps and separators.
+     *
+     * @param string $filePath The full path including filename where the XML should be written
+     * @param bool $formatXml Whether to format/prettify the XML output (default: true)
+     * @param bool $append Whether to append to existing file or overwrite (default: false)
+     * @return bool True on success, false on failure
+     */
+    public function writeXmlToFile(string $filePath, bool $formatXml = true, bool $append = false): bool
+    {
+        $request = $this->getFullXMLRequest();
+        $response = $this->getFullXMLResponse();
+
+        if ($request === false && $response === false) {
+            $this->logger->warning('No request or response XML available to write');
+            return false;
+        }
+
+        // Ensure directory exists
+        $directory = dirname($filePath);
+        if (!is_dir($directory)) {
+            if (!mkdir($directory, 0755, true)) {
+                $this->logger->error('Failed to create directory: ' . $directory);
+                return false;
+            }
+        }
+
+        // Format XML if requested
+        if ($formatXml) {
+            $request = $this->formatXmlString($request);
+            $response = $this->formatXmlString($response);
+        }
+
+        // Build file content
+        $content = [];
+        $content[] = str_repeat('=', 80);
+        $content[] = 'HMRC GovTalk XML Log';
+        $content[] = 'Generated: ' . date('Y-m-d H:i:s');
+        $content[] = str_repeat('=', 80);
+        $content[] = '';
+
+        // Request section
+        $content[] = str_repeat('-', 40);
+        $content[] = 'REQUEST XML';
+        $content[] = str_repeat('-', 40);
+        if ($request !== false) {
+            $content[] = $request;
+        } else {
+            $content[] = '(No request XML available)';
+        }
+        $content[] = '';
+
+        // Response section
+        $content[] = str_repeat('-', 40);
+        $content[] = 'RESPONSE XML';
+        $content[] = str_repeat('-', 40);
+        if ($response !== false) {
+            $content[] = $response;
+        } else {
+            $content[] = '(No response XML available)';
+        }
+        $content[] = '';
+        $content[] = str_repeat('=', 80);
+        $content[] = '';
+
+        $fileContent = implode("\n", $content);
+
+        // Write to file
+        $flags = $append ? FILE_APPEND : 0;
+        $result = file_put_contents($filePath, $fileContent, $flags);
+
+        if ($result === false) {
+            $this->logger->error('Failed to write XML to file: ' . $filePath);
+            return false;
+        }
+
+        $this->logger->info('XML written to file: ' . $filePath);
+        return true;
+    }
+
+    /**
+     * Save RAW unaltered XML files for HMRC Recognition submission.
+     * 
+     * IMPORTANT: This method saves the EXACT XML as sent/received without ANY
+     * modification. Use this for HMRC PAYE Recognition applications where
+     * they require "unaltered XML that was actually submitted/received".
+     * 
+     * Creates two separate files:
+     *   - {prefix}_request.xml  - The exact XML sent to HMRC
+     *   - {prefix}_response.xml - The exact XML received from HMRC
+     *
+     * @param string $directory The directory path where files should be saved
+     * @param string $prefix Filename prefix (e.g., 'FPS_Test1', 'EPS_Scenario2')
+     * @return array ['success' => bool, 'request_file' => string|null, 'response_file' => string|null, 'errors' => array]
+     */
+    public function saveRawXmlForHMRC(string $directory, string $prefix): array
+    {
+        $result = [
+            'success' => false,
+            'request_file' => null,
+            'response_file' => null,
+            'errors' => [],
+        ];
+
+        $request = $this->getFullXMLRequest();
+        $response = $this->getFullXMLResponse();
+
+        if ($request === false && $response === false) {
+            $result['errors'][] = 'No request or response XML available';
+            $this->logger->warning('No XML available for HMRC submission');
+            return $result;
+        }
+
+        // Ensure directory exists
+        $directory = rtrim($directory, '/\\');
+        if (!is_dir($directory)) {
+            if (!mkdir($directory, 0755, true)) {
+                $result['errors'][] = 'Failed to create directory: ' . $directory;
+                $this->logger->error('Failed to create directory: ' . $directory);
+                return $result;
+            }
+        }
+
+        // Sanitize prefix for filename
+        $prefix = preg_replace('/[^a-zA-Z0-9_-]/', '_', $prefix);
+
+        // Save REQUEST XML - completely unaltered
+        if ($request !== false) {
+            $requestFile = $directory . DIRECTORY_SEPARATOR . $prefix . '_request.xml';
+            if (file_put_contents($requestFile, $request) !== false) {
+                $result['request_file'] = $requestFile;
+                $this->logger->info('Raw request XML saved: ' . $requestFile);
+            } else {
+                $result['errors'][] = 'Failed to write request XML file';
+            }
+        }
+
+        // Save RESPONSE XML - completely unaltered
+        if ($response !== false) {
+            $responseFile = $directory . DIRECTORY_SEPARATOR . $prefix . '_response.xml';
+            if (file_put_contents($responseFile, $response) !== false) {
+                $result['response_file'] = $responseFile;
+                $this->logger->info('Raw response XML saved: ' . $responseFile);
+            } else {
+                $result['errors'][] = 'Failed to write response XML file';
+            }
+        }
+
+        $result['success'] = empty($result['errors']);
+        return $result;
+    }
+
+    /**
+     * Write only the request XML to a file.
+     *
+     * @param string $filePath The full path including filename
+     * @param bool $formatXml Whether to format/prettify the XML output (default: true)
+     * @return bool True on success, false on failure
+     */
+    public function writeRequestXmlToFile(string $filePath, bool $formatXml = true): bool
+    {
+        $request = $this->getFullXMLRequest();
+
+        if ($request === false) {
+            $this->logger->warning('No request XML available to write');
+            return false;
+        }
+
+        if ($formatXml) {
+            $request = $this->formatXmlString($request);
+        }
+
+        $directory = dirname($filePath);
+        if (!is_dir($directory) && !mkdir($directory, 0755, true)) {
+            $this->logger->error('Failed to create directory: ' . $directory);
+            return false;
+        }
+
+        $result = file_put_contents($filePath, $request);
+        return $result !== false;
+    }
+
+    /**
+     * Write only the response XML to a file.
+     *
+     * @param string $filePath The full path including filename
+     * @param bool $formatXml Whether to format/prettify the XML output (default: true)
+     * @return bool True on success, false on failure
+     */
+    public function writeResponseXmlToFile(string $filePath, bool $formatXml = true): bool
+    {
+        $response = $this->getFullXMLResponse();
+
+        if ($response === false) {
+            $this->logger->warning('No response XML available to write');
+            return false;
+        }
+
+        if ($formatXml) {
+            $response = $this->formatXmlString($response);
+        }
+
+        $directory = dirname($filePath);
+        if (!is_dir($directory) && !mkdir($directory, 0755, true)) {
+            $this->logger->error('Failed to create directory: ' . $directory);
+            return false;
+        }
+
+        $result = file_put_contents($filePath, $response);
+        return $result !== false;
+    }
+
+    /**
+     * Format an XML string for better readability.
+     *
+     * @param string|false $xmlString The XML string to format
+     * @return string|false The formatted XML string, or false if invalid
+     */
+    private function formatXmlString($xmlString)
+    {
+        if ($xmlString === false || empty($xmlString)) {
+            return false;
+        }
+
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom->preserveWhiteSpace = false;
+        $dom->formatOutput = true;
+
+        // Suppress errors for malformed XML
+        $previousErrorSetting = libxml_use_internal_errors(true);
+        $loaded = $dom->loadXML($xmlString);
+        libxml_use_internal_errors($previousErrorSetting);
+
+        if (!$loaded) {
+            // Return original if can't parse
+            return $xmlString;
+        }
+
+        return $dom->saveXML();
+    }
+
 
     /* Response data get methods */
 
