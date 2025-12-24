@@ -1506,6 +1506,48 @@ class GovTalk implements LoggerAwareInterface
         return $xml->outputMemory();
     }
 
+
+    /** Simple poll helper reusing GovTalk list/poll semantics (qualifier acknowledgement/response) */
+    public function poll(string $correlationId, ?string $pollUrl = null): array|false
+    {
+        if (!$correlationId) {
+            return false;
+        }
+        if ($pollUrl) {
+            $this->setGovTalkServer($pollUrl);
+        }
+        if (!$this->setMessageCorrelationId($correlationId)) {
+            return false;
+        }
+        $this->setMessageClass($this->messageClass);
+        $this->setMessageQualifier('poll');
+        $this->setMessageFunction('submit');
+        $this->setMessageTransformation('XML');
+        $this->resetMessageKeys();
+        $this->setMessageBody('');        
+        if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
+            // $messageQualifier = (string) $this->fullResponseObject->Header->MessageDetails->Qualifier;
+            // if ($messageQualifier === 'response') {
+            //     $body = $this->getResponseBody();
+            //     $returnable['response_message'] = (string) $body->SuccessResponse->Message;
+            // }
+            // if ($messageQualifier === 'acknowledgement') { 
+            //     $returnable = $this->getResponseEndpoint();
+            // } 
+            $returnable = $this->getResponseEndpoint();           
+        } else {
+            $returnable = ['errors' => $this->getResponseErrors()];
+        }
+        
+        $returnable['correlation_id'] = $this->getResponseCorrelationId();
+        $returnable['request_xml']     = $this->getFullXMLRequest();
+        $returnable['response_xml']    = $this->getFullXMLResponse();
+        $returnable['qualifier']    = $this->getResponseQualifier();
+        $returnable['submission_request'] = $this->fullRequestString;
+        return $returnable;
+
+    }
+
     /**
      * Submits and processes a generic list request. By default the request
      * refers to the last stored message class, but this behaviour can be over-
@@ -1524,17 +1566,17 @@ class GovTalk implements LoggerAwareInterface
         $this->setMessageFunction('list');
         $this->setMessageCorrelationId('');
         $this->setMessageBody('');
-
+        $returnable = [];
         if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
             if ((string) $this->fullResponseObject->Header->MessageDetails->Qualifier === 'response') {
-                $returnArray = array();
+                $returnable['data'] = array();
                 foreach ($this->fullResponseObject->Body->StatusReport->StatusRecord as $reportNode) {
                     preg_match(
                         '#(\d{2})/(\d{2})/(\d{4}) (\d{2}):(\d{2}):(\d{2})#',
                         $reportNode->TimeStamp,
                         $timeChunks
                     );
-                    $returnArray[] = array(
+                    $returnable['data'][] = array(
                         'timestamp' => mktime(
                             $timeChunks[4],
                             $timeChunks[5],
@@ -1548,10 +1590,15 @@ class GovTalk implements LoggerAwareInterface
                         'status' => (string) $reportNode->Status
                     );
                 }
-                return $returnArray;
-            }
+            }            
+        }else{
+            $returnable = ['errors' => $this->getResponseErrors()];
         }
-        return false;
+        $returnable['request_xml']     = $this->getFullXMLRequest();
+        $returnable['response_xml']    = $this->getFullXMLResponse();
+        $returnable['qualifier']    = $this->getResponseQualifier();
+        $returnable['submission_request'] = $this->fullRequestString;
+        return $returnable;
     }
 
 

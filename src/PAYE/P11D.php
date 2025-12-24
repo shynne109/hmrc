@@ -1427,42 +1427,7 @@ class P11D extends GovTalk
         return $gzHeader . $deflated . $crc . $isize;
     }
 
-    /** Simple poll helper reusing GovTalk list/poll semantics (qualifier acknowledgement/response) */
-    public function poll(string $correlationId, ?string $pollUrl = null): array|false
-    {
-        if (!$correlationId) {
-            return false;
-        }
-        if ($pollUrl) {
-            $this->setGovTalkServer($pollUrl);
-        }
-        if (!$this->setMessageCorrelationId($correlationId)) {
-            return false;
-        }
-        $this->setMessageClass(self::MESSAGE_CLASS);
-        $this->setMessageQualifier('poll');
-        $this->setMessageFunction('submit');
-        $this->setMessageTransformation('XML');
-        $this->resetMessageKeys();
-        $this->setMessageBody('');
-        if (!$this->sendMessage()) {
-            return false;
-        }
-        if ($this->responseHasErrors()) {
-            return [
-                'request_xml' => $this->getFullXMLRequest(),
-                'response_xml' => $this->getFullXMLResponse(),
-                'errors' => $this->getResponseErrors(),
-            ];
-        }
-        $qual = $this->getResponseQualifier();
-        return [
-            'qualifier' => $qual,
-            'request_xml' => $this->getFullXMLRequest(),
-            'response_xml' => $this->getFullXMLResponse(),
-            'correlation_id' => $this->getResponseCorrelationId(),
-        ];
-    }
+   
 
     /**
      * Withdraw a previously submitted P11D/P11D(b) that has not yet been processed.
