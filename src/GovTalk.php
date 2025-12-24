@@ -1508,7 +1508,7 @@ class GovTalk implements LoggerAwareInterface
 
 
     /** Simple poll helper reusing GovTalk list/poll semantics (qualifier acknowledgement/response) */
-    public function poll(string $correlationId, ?string $pollUrl = null): array|false
+    public function poll(string $correlationId, ?string $pollUrl = null, $messageClass = null): array|false
     {
         if (!$correlationId) {
             return false;
@@ -1519,7 +1519,10 @@ class GovTalk implements LoggerAwareInterface
         if (!$this->setMessageCorrelationId($correlationId)) {
             return false;
         }
-        $this->setMessageClass($this->messageClass);
+        if ($messageClass == null) {
+            $messageClass = $this->messageClass;
+        }
+        $this->setMessageClass($messageClass);
         $this->setMessageQualifier('poll');
         $this->setMessageFunction('submit');
         $this->setMessageTransformation('XML');
