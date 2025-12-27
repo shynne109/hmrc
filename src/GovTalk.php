@@ -1507,7 +1507,36 @@ class GovTalk implements LoggerAwareInterface
     }
 
 
-    /** Simple poll helper reusing GovTalk list/poll semantics (qualifier acknowledgement/response) */
+    /**
+     * Poll for the status/result of a previously submitted message.
+     * 
+     * IMPORTANT: Check the 'qualifier' or 'complete' flag in the response to determine
+     * whether to continue polling:
+     * 
+     *   - qualifier = 'acknowledgement': Still processing, poll again after 'interval' seconds
+     *   - qualifier = 'response': Transaction COMPLETE - DO NOT poll again
+     *   - qualifier = 'error': An error occurred
+     * 
+     * The 'complete' flag is set to true when qualifier is 'response', indicating
+     * no further polling is needed.
+     * 
+     * Example usage:
+     * ```php
+     * $result = $govTalk->poll($correlationId, $pollUrl, $messageClass);
+     * if ($result['complete']) {
+     *     // Transaction finished - process final response
+     * } elseif ($result['qualifier'] === 'acknowledgement') {
+     *     // Still processing - wait and poll again
+     *     sleep($result['interval'] ?? 10);
+     *     // ... poll again
+     * }
+     * ```
+     *
+     * @param string $correlationId The correlation ID from the original submission
+     * @param string|null $pollUrl The URL to poll (uses ResponseEndPoint from previous response)
+     * @param string|null $messageClass The message class (defaults to last used class)
+     * @return array|false Poll result with 'qualifier', 'complete', 'correlation_id', etc., or false on failure
+     */
     public function poll(string $correlationId, ?string $pollUrl = null, $messageClass = null): array|false
     {
         if (!$correlationId) {
@@ -1529,15 +1558,7 @@ class GovTalk implements LoggerAwareInterface
         $this->resetMessageKeys();
         $this->setMessageBody('');        
         if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
-            // $messageQualifier = (string) $this->fullResponseObject->Header->MessageDetails->Qualifier;
-            // if ($messageQualifier === 'response') {
-            //     $body = $this->getResponseBody();
-            //     $returnable['response_message'] = (string) $body->SuccessResponse->Message;
-            // }
-            // if ($messageQualifier === 'acknowledgement') { 
-            //     $returnable = $this->getResponseEndpoint();
-            // } 
-            $returnable = $this->getResponseEndpoint();           
+            $returnable = $this->getResponseEndpoint() ?: [];
         } else {
             $returnable = ['errors' => $this->getResponseErrors()];
         }
@@ -1545,10 +1566,15 @@ class GovTalk implements LoggerAwareInterface
         $returnable['correlation_id'] = $this->getResponseCorrelationId();
         $returnable['request_xml']     = $this->getFullXMLRequest();
         $returnable['response_xml']    = $this->getFullXMLResponse();
-        $returnable['qualifier']    = $this->getResponseQualifier();
+        $returnable['qualifier']       = $this->getResponseQualifier();
         $returnable['submission_request'] = $this->fullRequestString;
+        
+        // Set 'complete' flag to indicate whether polling should stop
+        // 'response' means HMRC has finished processing - do NOT poll again
+        // 'acknowledgement' means still processing - poll again after interval
+        $returnable['complete'] = ($returnable['qualifier'] === 'response');
+        
         return $returnable;
-
     }
 
     /**
