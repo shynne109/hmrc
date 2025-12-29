@@ -34,6 +34,17 @@ use HMRC\PAYE\ContactDetails;
  */
 class EPS extends GovTalk
 {
+    /**
+     * Employment Allowance amount for 2025/26 tax year (£10,500)
+     * Increased from £5,000 in previous years
+     */
+    public const EMPLOYMENT_ALLOWANCE_2025_26 = 10500.00;
+    
+    /**
+     * Employment Allowance amount for 2024/25 tax year (£5,000)
+     */
+    public const EMPLOYMENT_ALLOWANCE_2024_25 = 5000.00;
+
     private string $devEndpoint  = 'https://test-transaction-engine.tax.service.gov.uk/submission';
     private string $liveEndpoint = 'https://transaction-engine.tax.service.gov.uk/submission';
 
@@ -210,9 +221,90 @@ class EPS extends GovTalk
     /**
      * Legacy method for backward compatibility
      */
-    public function claimEmploymentAllowance(bool $on = true): void
+    public function claimEmploymentAllowanceOld(bool $on = true): void
     {
         $this->employmentAllowance = $on ? 'yes' : 'no';
+    }
+
+    /**
+     * Claim Employment Allowance with automatic State Aid handling
+     * 
+     * For 2025/26 onwards:
+     * - Allowance increased to £10,500 (from £5,000)
+     * - Previous £100k NI threshold restriction removed
+     * - State Aid questions generally no longer required (NA selected automatically)
+     * 
+     * IMPORTANT RESTRICTIONS:
+     * - Cannot claim if the only employee is a director (single director companies)
+     * - Can only claim on ONE PAYE scheme if you have multiple
+     * - Submit ONCE at start of tax year (or when first eligible)
+     * 
+     * @param bool $autoSetStateAidNA Automatically set State Aid to 'Not Applicable' (default true)
+     * @return self For method chaining
+     * 
+     * @example
+     * ```php
+     * $eps->claimEmploymentAllowance();
+     * // Equivalent to:
+     * // $eps->setEmploymentAllowance('yes');
+     * // $eps->setDeMinimisStateAid('NA');
+     * ```
+     */
+    public function claimEmploymentAllowance(bool $autoSetStateAidNA = true): self
+    {
+        $this->employmentAllowance = 'yes';
+        
+        // For 2025/26 onwards, State Aid is generally Not Applicable
+        if ($autoSetStateAidNA) {
+            $this->setDeMinimisStateAid('NA');
+        }
+        
+        return $this;
+    }
+
+    /**
+     * Stop claiming Employment Allowance
+     * Use this if circumstances change and you're no longer eligible
+     * 
+     * @return self For method chaining
+     */
+    public function stopEmploymentAllowanceClaim(): self
+    {
+        $this->employmentAllowance = 'no';
+        
+        // Reset State Aid indicators when stopping the claim
+        $this->deMinimisAgri = false;
+        $this->deMinimisFisheriesAqua = false;
+        $this->deMinimisRoadTrans = false;
+        $this->deMinimisIndust = false;
+        $this->deMinimisNA = false;
+        
+        return $this;
+    }
+
+    /**
+     * Check if Employment Allowance is being claimed
+     * 
+     * @return bool True if claiming, false otherwise
+     */
+    public function isClaimingEmploymentAllowance(): bool
+    {
+        return $this->employmentAllowance === 'yes';
+    }
+
+    /**
+     * Get the current Employment Allowance amount for a tax year
+     * 
+     * @param string $taxYear Tax year in YY-YY format (e.g., '25-26')
+     * @return float The allowance amount for the tax year
+     */
+    public static function getEmploymentAllowanceAmount(string $taxYear = '25-26'): float
+    {
+        return match ($taxYear) {
+            '25-26' => self::EMPLOYMENT_ALLOWANCE_2025_26,
+            '24-25' => self::EMPLOYMENT_ALLOWANCE_2024_25,
+            default => self::EMPLOYMENT_ALLOWANCE_2025_26, // Default to current year
+        };
     }
 
     /**
@@ -420,6 +512,30 @@ class EPS extends GovTalk
                     );
                 }
             }
+        }
+
+        // Employment Allowance validation
+        if ($this->employmentAllowance === 'yes') {
+            // Log warning about State Aid requirement (for pre-2025/26 years)
+            $taxYearStart = (int)substr($this->relatedTaxYear, 0, 2);
+            if ($taxYearStart < 25) {
+                // Pre-2025/26 tax years required State Aid selection
+                $hasStateAid = $this->deMinimisAgri || $this->deMinimisFisheriesAqua || 
+                               $this->deMinimisRoadTrans || $this->deMinimisIndust || $this->deMinimisNA;
+                if (!$hasStateAid) {
+                    $this->logger->warning(
+                        'Employment Allowance claim for tax year ' . $this->relatedTaxYear . 
+                        ' may require De Minimis State Aid indicator. Consider using setDeMinimisStateAid().'
+                    );
+                }
+            }
+            
+            // Log reminder about single director company restriction
+            $this->logger->info(
+                'Employment Allowance claimed. Remember: Cannot claim if the only employee on payroll is a director. ' .
+                'At least one other employee must reach the NIC threshold.',
+                ['tax_year' => $this->relatedTaxYear, 'allowance_amount' => self::getEmploymentAllowanceAmount($this->relatedTaxYear)]
+            );
         }
     }
 
