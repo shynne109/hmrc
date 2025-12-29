@@ -268,9 +268,6 @@ class P11D extends GovTalk
 
         // IRheader
         $xml->startElement('IRheader');
-        $xml->startElement('TestMessage');
-        $xml->text(7);
-        $xml->endElement();
 
         $xml->startElement('Keys');
         $xml->startElement('Key'); 
