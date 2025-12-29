@@ -323,7 +323,7 @@ class P11D extends GovTalk
     {
         $xml->startElement('ExpensesAndBenefits');
 
-        
+        $xml->writeElement('RelatedTaxYear', $this->relatedTaxYear);        
 
         // Employer
         $xml->startElement('Employer');
