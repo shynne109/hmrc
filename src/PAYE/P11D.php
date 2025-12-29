@@ -281,7 +281,10 @@ class P11D extends GovTalk
         $xml->writeAttribute('Type','TaxOfficeReference'); 
         $xml->text($this->employer->getTaxOfficeReference()); 
         $xml->endElement();
-        if ($this->employer->getCorporationTaxReference()) {
+        // UTR key should only be included for P11D submissions, NOT for P46 Car-only submissions
+        // Including UTR in P46 Car submissions triggers HMRC Error 6010 (format error)
+        $isP46CarOnly = $this->p46CarIncluded && !$this->p11dIncluded && empty($this->employees);
+        if ($this->employer->getCorporationTaxReference() && !$isP46CarOnly) {
             $xml->startElement('Key');
             $xml->writeAttribute('Type', 'UTR');
             $xml->text($this->employer->getCorporationTaxReference());

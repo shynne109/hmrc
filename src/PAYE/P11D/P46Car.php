@@ -6,9 +6,9 @@ use XMLWriter;
 
 /**
  * P46Car data holder for P46 Car Benefit submissions.
- * Handles individual car benefit declarations per HMRC EXB-2026-v1-0.xsd schema.
+ * Handles individual car benefit declarations per HMRC EXB schema.
  * 
- * XSD Structure:
+ * XSD Structure (24-25 schema sequence order):
  * - P46Car
  *   - EmployeeDetails (required)
  *     - Name (EXBNameStructure: Ttl?, Fore+, Sur)
@@ -26,20 +26,23 @@ use XMLWriter;
  *     - EngineSize (with @Category attribute: 1=up to 1400cc, 2=1401-2000cc, 3=2001+cc, 4=electric)
  *     - DateFirstRegistered
  *     - FuelType? (F=Diesel Euro 6d, D=Other Diesel, A=All other)
- *   - CO2Emissions? (choice)
- *     - Emissions + ZeroEmissionMileage?
- *     - OR Before1998
- *     - OR NoApproved
- *   - MonetaryDetails?
+ *   - MonetaryDetails? (MUST come before CO2Emissions in 24-25 schema)
  *     - CarPrice (1-9999999)
  *     - AccessoriesPrice? (1-999999)
  *     - DateFirstAvailable
  *     - CashForgone? (1-9999999)
  *     - CapitalContributions (0-5000)
  *     - PrivateUsePayment? (with @Interval: Y/Q/M/W)
+ *   - CO2Emissions? (choice) - MUST come after MonetaryDetails
+ *     - Emissions + ZeroEmissionMileage?
+ *     - OR Before1998
+ *     - OR NoApproved
  *   - Fuel?
  *     - PrivateUse
  *     - FuelPaidByEmployee?
+ * 
+ * IMPORTANT: Element ordering is critical for HMRC schema validation.
+ * Error 6010 occurs if elements are out of sequence.
  */
 class P46Car
 {
@@ -127,7 +130,9 @@ class P46Car
         // Employee Details
         $this->forename2 = $data['forename2'] ?? null;
         $this->title = $data['title'] ?? null;
-        $this->nino = $data['nino'] ?? null;
+        // NINO must be trimmed to prevent HMRC format errors (trailing whitespace causes 6010)
+        $nino = $data['nino'] ?? null;
+        $this->nino = $nino !== null ? strtoupper(trim($nino)) : null;
         $this->birthDate = $data['birthDate'] ?? null;
         $this->gender = $data['gender'] ?? null;
 
@@ -751,7 +756,10 @@ class P46Car
 
     /**
      * Write P46Car XML element to XMLWriter
-     * Follows EXB-2026-v1-0.xsd schema structure
+     * Follows EXB-2024-25 schema structure for P46 Car submissions.
+     * 
+     * IMPORTANT: Element order is critical for HMRC schema validation.
+     * The 24-25 schema expects MonetaryDetails BEFORE CO2Emissions.
      */
     public function writeXml(XMLWriter $xml): void
     {
@@ -766,11 +774,11 @@ class P46Car
         // 3. CarDetails (optional)
         $this->writeCarDetails($xml);
 
-        // 4. CO2Emissions (optional)
-        $this->writeCO2Emissions($xml);
-
-        // 5. MonetaryDetails (optional)
+        // 4. MonetaryDetails (optional) - Must come BEFORE CO2Emissions per 24-25 schema
         $this->writeMonetaryDetails($xml);
+
+        // 5. CO2Emissions (optional) - Must come AFTER MonetaryDetails per 24-25 schema
+        $this->writeCO2Emissions($xml);
 
         // 6. Fuel (optional)
         $this->writeFuel($xml);
