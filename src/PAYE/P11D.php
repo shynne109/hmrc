@@ -1345,14 +1345,17 @@ class P11D extends GovTalk
     protected function packageDigest($package)
     {
         $packageSimpleXML  = simplexml_load_string($package);
-        $packageNamespaces = $packageSimpleXML->getNamespaces();
-
-        $body = $packageSimpleXML->xpath('GovTalkMessage/Body');
+        // Note: We do NOT pass namespaces to generateIRMark for P11D/P46Car
+        // The IRenvelope already has its own xmlns declaration which gets preserved
+        // in the Body content. Adding the outer GovTalkMessage namespace (CM/envelope)
+        // to the Body wrapper would cause incorrect IRmark calculation.
 
         preg_match('#<Body>(.*)<\/Body>#su', $packageSimpleXML->asXML(), $matches);
         $packageBody = $matches[1];
 
-        $irMark  = base64_encode($this->generateIRMark($packageBody, $packageNamespaces));
+        // Pass null for namespaces - the Body wrapper should be namespace-free
+        // The IRenvelope inside maintains its own EXB namespace declaration
+        $irMark  = base64_encode($this->generateIRMark($packageBody, null));
         $this->irMark = $irMark;
         $package = str_replace('IRmark+Token', $irMark, $package);
 
