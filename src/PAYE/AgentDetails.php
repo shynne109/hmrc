@@ -157,31 +157,45 @@ class AgentDetails
             $xw->writeElement('Company', $this->getCompany());
         }
 
-        // Address
+        // Address - only output if we have at least one address line (required per XSD)
         if ($this->getAddress() !== null) {
             $address = $this->getAddress();
-            $xw->startElement('Address');
-
-            // Address lines
+            
+            // Check if we have at least one non-empty address line
+            $hasValidLine = false;
             if (isset($address['Line'])) {
+                $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
+                foreach ($lines as $line) {
+                    if (!empty($line)) {
+                        $hasValidLine = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Only output Address element if we have at least one valid line
+            if ($hasValidLine) {
+                $xw->startElement('Address');
+
+                // Address lines (1..4 required)
                 $lines = is_array($address['Line']) ? $address['Line'] : [$address['Line']];
                 foreach ($lines as $line) {
                     if (!empty($line)) {
                         $xw->writeElement('Line', $line);
                     }
                 }
-            }
 
-            // Post Code
-            if (isset($address['PostCode']) && !empty($address['PostCode'])) {
-                $xw->writeElement('PostCode', $address['PostCode']);
-            }
+                // Post Code (optional)
+                if (isset($address['PostCode']) && !empty($address['PostCode'])) {
+                    $xw->writeElement('PostCode', $address['PostCode']);
+                }
 
-            // Country
-            if (isset($address['Country']) && !empty($address['Country'])) {
-                $xw->writeElement('Country', $address['Country']);
+                // Country (optional)
+                if (isset($address['Country']) && !empty($address['Country'])) {
+                    $xw->writeElement('Country', $address['Country']);
+                }
+                $xw->endElement(); // Address
             }
-            $xw->endElement(); // Address
         }
         if ($this->getAgentContact() !== null && $this->getAgentContact()->hasData()) {
             $this->getAgentContact()->writeAgentContactDetails($xw);
