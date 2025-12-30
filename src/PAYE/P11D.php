@@ -268,9 +268,12 @@ class P11D extends GovTalk
 
         // IRheader
         $xml->startElement('IRheader');
-        // $xml->startElement('TestMessage');
-        // $xml->text(7);
-        // $xml->endElement();
+        
+        // TestMessage element is required for test gateway submissions
+        // Must be first element in IRheader per XSD sequence
+        if ($this->testMode) {
+            $xml->writeElement('TestMessage', '1');
+        }
 
         $xml->startElement('Keys');
         $xml->startElement('Key'); 
