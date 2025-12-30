@@ -130,9 +130,23 @@ class P46Car
         // Employee Details
         $this->forename2 = $data['forename2'] ?? null;
         $this->title = $data['title'] ?? null;
-        // NINO must be trimmed to prevent HMRC format errors (trailing whitespace causes 6010)
+        // NINO must be exactly 9 characters: 2 letters + 6 digits + suffix (A-D or space)
+        // Trailing whitespace causes HMRC Error 6010, and missing suffix is invalid
         $nino = $data['nino'] ?? null;
-        $this->nino = $nino !== null ? strtoupper(trim($nino)) : null;
+        if ($nino !== null) {
+            $nino = strtoupper(trim($nino));
+            // If NINO is 8 chars (missing suffix), append a space to make it valid
+            if (strlen($nino) === 8 && preg_match('/^[A-Z]{2}[0-9]{6}$/', $nino)) {
+                $nino .= ' ';
+            }
+            // Validate the final format
+            if (!preg_match('/^[A-Z]{2}[0-9]{6}[A-D ]$/', $nino)) {
+                throw new \InvalidArgumentException(
+                    "Invalid NINO format: '$nino'. Must be 2 letters + 6 digits + suffix (A, B, C, D, or space)"
+                );
+            }
+        }
+        $this->nino = $nino;
         $this->birthDate = $data['birthDate'] ?? null;
         $this->gender = $data['gender'] ?? null;
 
@@ -243,8 +257,14 @@ class P46Car
     {
         if ($nino !== null) {
             $nino = strtoupper(trim($nino));
+            // If NINO is 8 chars (missing suffix), append a space to make it valid
+            if (strlen($nino) === 8 && preg_match('/^[A-Z]{2}[0-9]{6}$/', $nino)) {
+                $nino .= ' ';
+            }
             if (!preg_match('/^[A-Z]{2}[0-9]{6}[A-D ]$/', $nino)) {
-                throw new \InvalidArgumentException('Invalid NINO format');
+                throw new \InvalidArgumentException(
+                    "Invalid NINO format: '$nino'. Must be 2 letters + 6 digits + suffix (A, B, C, D, or space)"
+                );
             }
         }
         $this->nino = $nino;
