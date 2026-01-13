@@ -868,6 +868,58 @@ Individual car benefit submissions with three submission types:
 - **Amendment**: Modification to existing car benefit
 - **Cessation**: End of car benefit provision
 
+#### Important: P46 Car-only Submissions
+
+For **P46 Car-only submissions** (without P11D employee records), use the dedicated `P46CarSubmission` class:
+
+```php
+use HMRC\PAYE\P46CarSubmission;
+use HMRC\PAYE\P11D\P46Car;
+use HMRC\PAYE\ReportingCompany;
+
+// Create employer
+$employer = new ReportingCompany();
+$employer->setTaxOfficeNumber('635');
+$employer->setTaxOfficeReference('A635');
+$employer->setName('Company Name Ltd');
+
+// Create P46 Car-only submission
+$submission = new P46CarSubmission(
+    senderId: 'SENDERID',
+    password: 'password',
+    employer: $employer,
+    periodEnd: '2026-04-05',
+    testMode: true
+);
+
+// Add P46 Car record
+$car = new P46Car([
+    'forename' => 'John',
+    'surname' => 'Smith',
+    'nino' => 'AB123456A',
+    'providedCar' => true,
+    'makeAndModel' => 'BMW 320i',
+    'engineSize' => 1998,
+    'engineSizeCategory' => 2,
+    'dateFirstRegistered' => '2024-03-15',
+    'fuelType' => 'A',
+    'co2Emissions' => 125,
+    'carPrice' => 35000,
+    'dateFirstAvailable' => '2025-04-06',
+    'capitalContributions' => 0,
+    'fuelPrivateUse' => true
+]);
+
+$submission->addP46Car($car);
+$result = $submission->submit();
+```
+
+The `P46CarSubmission` class:
+- Uses correct namespace handling per HMRC guidance
+- Does NOT include TestMessage element (removed per HMRC feedback)
+- Does NOT include UTR key (not required for P46 Car submissions)
+- Automatically sets P11Dincluded='are not due' and P46CarDeclaration='yes'
+
 ### Quick Start Example
 
 ```php

@@ -272,7 +272,7 @@ class P11D extends GovTalk
         // TestMessage element is required for test gateway submissions
         // Must be first element in IRheader per XSD sequence
         if ($this->testMode) {
-            $xml->writeElement('TestMessage', '1');
+            // $xml->writeElement('TestMessage', '1');
         }
 
         $xml->startElement('Keys');
@@ -304,6 +304,7 @@ class P11D extends GovTalk
         // Agent information
         if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
             $this->agentDetails->writeAgent($xml);
+            $this->setSenderType('Agent');
         }
 
         $xml->writeElement('DefaultCurrency', 'GBP');

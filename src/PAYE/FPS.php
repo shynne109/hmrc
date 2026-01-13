@@ -63,7 +63,7 @@ class FPS extends GovTalk
         $this->testMode = $testMode;
         $this->customTestEndpoint = $customTestEndpoint;
         $this->employer = $employer;
-        $this->relatedTaxYear = date('y') . '-' . sprintf('%02d', (int)date('y') + 1); // naive default
+        $this->relatedTaxYear = $this->calculateCurrentTaxYear();
         $endpoint = $this->resolveEndpoint();
 
         parent::__construct($endpoint, $senderId, $password);
@@ -93,6 +93,33 @@ class FPS extends GovTalk
     public function setRelatedTaxYear(string $yyDashYy): void
     {
         $this->relatedTaxYear = $yyDashYy; // format '25-26'
+    }
+
+    /**
+     * Calculate the current HMRC tax year.
+     * UK tax year runs from April 6th to April 5th of the following year.
+     * For example: April 6, 2025 to April 5, 2026 = tax year "25-26"
+     *
+     * @return string Tax year in format 'YY-YY' (e.g., '25-26')
+     */
+    private function calculateCurrentTaxYear(): string
+    {
+        $now = new \DateTime();
+        $year = (int) $now->format('Y');
+        $month = (int) $now->format('n');
+        $day = (int) $now->format('j');
+
+        // Tax year starts on April 6th
+        // If before April 6th, we're in the previous tax year
+        if ($month < 4 || ($month === 4 && $day < 6)) {
+            $startYear = $year - 1;
+        } else {
+            $startYear = $year;
+        }
+
+        $endYear = $startYear + 1;
+
+        return sprintf('%02d-%02d', $startYear % 100, $endYear % 100);
     }
 
     public function setSenderType(string $type): void
@@ -606,7 +633,7 @@ class FPS extends GovTalk
         }
 
         if ($this->sendMessage() && ($this->responseHasErrors() === false)) {
-            $returnable                  = $this->getResponseEndpoint();
+            $returnable  = $this->getResponseEndpoint();
         } else {
             $returnable = ['errors' => $this->getResponseErrors()];
         }

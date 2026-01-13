@@ -1570,9 +1570,9 @@ class GovTalk implements LoggerAwareInterface
         $returnable['submission_request'] = $this->fullRequestString;
         
         // Set 'complete' flag to indicate whether polling should stop
-        // 'response' means HMRC has finished processing - do NOT poll again
+        // 'response' or 'error' means HMRC has finished processing - do NOT poll again
         // 'acknowledgement' means still processing - poll again after interval
-        $returnable['complete'] = ($returnable['qualifier'] === 'response');
+        $returnable['complete'] = in_array($returnable['qualifier'], ['response', 'error'], true);
         
         return $returnable;
     }
