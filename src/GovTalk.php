@@ -1349,7 +1349,7 @@ class GovTalk implements LoggerAwareInterface
         }
 
         $this->setMessageClass($messageClass);
-        $this->setMessageQualifier($qualifier);
+        $this->setMessageQualifier('request');
         $this->setMessageFunction("delete");
         $this->setMessageCorrelationId($correlationId);
         $this->setMessageBody('');
