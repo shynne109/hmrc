@@ -35,7 +35,6 @@ class RetrieveVATObligationsRequest extends VATGetRequest
     public function __construct(string $vrn, string $from = "", string $to = "", string $status = null)
     {
         parent::__construct($vrn);
-        info("Getting obligation");
         if($from != "") DateChecker::checkDateStringFormat($from, 'Y-m-d');
         if($to != "") DateChecker::checkDateStringFormat($to, 'Y-m-d');
 

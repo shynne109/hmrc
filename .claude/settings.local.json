@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(php:*)"
+      "Bash(php:*)",
+      "Bash(cd:*)",
+      "Bash(cmd.exe /c \"cd /d D:\\\\Herd\\\\hmrc && php examples/recognition_p11d_2024_25.php\")",
+      "Bash(powershell.exe -Command \"cd ''D:\\\\Herd\\\\hmrc''; php examples/recognition_p11d_2024_25.php\")",
+      "Bash(powershell.exe -Command \"cd ''D:\\\\Herd\\\\hmrc''; php examples/recognition_p46car_2024_25.php\")",
+      "Bash(powershell.exe -Command \"Get-Content ''D:\\\\Herd\\\\hmrc\\\\examples\\\\recognition_output\\\\P46Car_2024-25_SUBMIT_response.xml''\")",
+      "Bash(powershell.exe -Command \"Get-Content ''D:\\\\Herd\\\\hmrc\\\\examples\\\\recognition_output\\\\P46Car_2024-25_SUBMIT_request.xml''\")"
     ]
   }
 }

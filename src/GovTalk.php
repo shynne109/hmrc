@@ -40,6 +40,12 @@ class GovTalk implements LoggerAwareInterface
     private ?string $additionalXsiSchemaLocation = null;
 
     /**
+     * Whether to include xsi:schemaLocation in GovTalkMessage element.
+     * HMRC sample XMLs do NOT include this attribute.
+     */
+    private bool $includeSchemaLocation = true;
+
+    /**
      * GovTalk test flag.  Default is 0, a real message.
      */
     private string $govTalkTest = '0';
@@ -806,6 +812,18 @@ class GovTalk implements LoggerAwareInterface
     }
 
     /**
+     * Enable or disable xsi:schemaLocation attribute in the GovTalkMessage element.
+     * HMRC sample XMLs do NOT include this attribute, so disabling may improve
+     * compatibility with HMRC systems.
+     *
+     * @param bool $include True to include schemaLocation, false to omit it.
+     */
+    public function setIncludeSchemaLocation(bool $include): void
+    {
+        $this->includeSchemaLocation = $include;
+    }
+
+    /**
      * Switch off (or on) schema validation of outgoing and incoming XML data
      * against the additional XML schema.
      *
@@ -1154,10 +1172,11 @@ class GovTalk implements LoggerAwareInterface
                 }
             }
             if (($timestamp !== null) && ($parsedTimestamp = strtotime($timestamp))) {
-                $newRoute['timestamp'] = date('c', $parsedTimestamp);
-            } else {
-                $newRoute['timestamp'] = date('c');
+                // Use xsd:dateTime format without timezone offset for HMRC compatibility
+                $newRoute['timestamp'] = date('Y-m-d\TH:i:s', $parsedTimestamp);
             }
+            // When no timestamp is provided, omit it from the route.
+            // The XML writer will only include <Timestamp> if this key exists.
             if ($force === false) {
                 $matchedChannel = false;
                 foreach ($this->messageChannelRouting as $channelRoute) {
@@ -1553,7 +1572,7 @@ class GovTalk implements LoggerAwareInterface
         }
         $this->setMessageClass($messageClass);
         $this->setMessageQualifier('poll');
-        $this->setMessageFunction('submit');
+        $this->setMessageFunction('submit');  // Per HMRC poll endpoint schema, Function must be 'submit'
         $this->setMessageTransformation('XML');
         $this->resetMessageKeys();
         $this->setMessageBody('');        
@@ -1845,21 +1864,28 @@ class GovTalk implements LoggerAwareInterface
         $package = new XMLWriter();
         $package->openMemory();
         $package->setIndent(true);
+        
+        // Add XML declaration like HMRC samples
+        $package->startDocument('1.0', 'UTF-8');
 
         // Packaging...
         $package->startElement('GovTalkMessage');
         $xsiSchemaName = 'http://www.govtalk.gov.uk/CM/envelope';
-        $xsiSchemaLocation = $xsiSchemaName.' http://www.govtalk.gov.uk/documents/envelope-v2-0.xsd';
-        if ($this->additionalXsiSchemaLocation !== null) {
-            $xsiSchemaLocation .= ' '.$this->additionalXsiSchemaLocation;
-        }
         $package->writeAttribute('xmlns', $xsiSchemaName);
-        $package->writeAttributeNS(
-            'xsi',
-            'schemaLocation',
-            'http://www.w3.org/2001/XMLSchema-instance',
-            $xsiSchemaLocation
-        );
+        
+        // Only add xsi:schemaLocation if enabled (HMRC samples don't include it)
+        if ($this->includeSchemaLocation) {
+            $xsiSchemaLocation = $xsiSchemaName.' http://www.govtalk.gov.uk/documents/envelope-v2-0.xsd';
+            if ($this->additionalXsiSchemaLocation !== null) {
+                $xsiSchemaLocation .= ' '.$this->additionalXsiSchemaLocation;
+            }
+            $package->writeAttributeNS(
+                'xsi',
+                'schemaLocation',
+                'http://www.w3.org/2001/XMLSchema-instance',
+                $xsiSchemaLocation
+            );
+        }
         $package->writeElement('EnvelopeVersion', '2.0');
 
         // Header...
@@ -1872,17 +1898,14 @@ class GovTalk implements LoggerAwareInterface
         if ($this->messageFunction !== null) {
             $package->writeElement('Function', $this->messageFunction);
         }
-        $package->writeElement('TransactionID', $this->transactionId);
+        // TransactionID removed - not in HMRC samples for submit requests
+        // $package->writeElement('TransactionID', $this->transactionId);
         $package->writeElement('CorrelationID', $this->messageCorrelationId);
         $package->writeElement('Transformation', $this->messageTransformation);
         $package->writeElement('GatewayTest', $this->govTalkTest);
 
-        /**
-         * @see GovTalk::setTimestamp() for usage.
-         */
-        if ($this->timestamp && $this->govTalkTest === '1') {
-            $package->writeElement('GatewayTimestamp', $this->timestamp->format('Y-m-d\TH:i:s'));
-        }
+        // Always include GatewayTimestamp element (empty for test)
+        $package->writeElement('GatewayTimestamp', '');
 
         $package->endElement(); # MessageDetails
 
@@ -1982,7 +2005,11 @@ class GovTalk implements LoggerAwareInterface
                 }
             }
 
-            $package->writeElement('Timestamp', $channelRoute['timestamp']);
+            // Timestamp - required by HMRC P46 Car BVR 7974 validation.
+            // The gateway uses this as "Date of Submission" for DateFirstAvailable checks.
+            if (array_key_exists('timestamp', $channelRoute) && !empty($channelRoute['timestamp'])) {
+                $package->writeElement('Timestamp', $channelRoute['timestamp']);
+            }
             $package->endElement(); # ChannelRouting
         }
         $package->endElement(); # GovTalkDetails

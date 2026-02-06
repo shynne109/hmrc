@@ -39,7 +39,7 @@ class CT600 extends GovTalk
 
     private ReportingCompany $employer;
 
-    private string $senderType = 'Employer';
+    private string $senderType = 'Company'; // HMRC sample uses 'Company' for CT600
     // CompanyInformation extensions
     private ?array $northernIreland = null; // ['NItradingActivity'=>'yes'/'no', 'SME'=>'yes'/'no', 'NIemployer'=>'yes'/'no', 'SpecialCircumstances'=>'yes'/'no']
     // ReturnInfoSummary extensions
@@ -398,6 +398,24 @@ class CT600 extends GovTalk
     public function setReturnType(string $type): self
     {
         $this->returnType = $type;
+        return $this;
+    }
+
+    public function setCompanyName(string $name): self
+    {
+        $this->companyName = $name;
+        return $this;
+    }
+
+    public function setCompanyRegNo(string $regNo): self
+    {
+        $this->companyRegNo = $regNo;
+        return $this;
+    }
+
+    public function setUtr(string $utr): self
+    {
+        $this->utr = $utr;
         return $this;
     }
 
@@ -2112,14 +2130,12 @@ class CT600 extends GovTalk
             $this->setMessageFunction('submit');
             $this->setMessageCorrelationId('');
             $this->setMessageTransformation('XML');
-            $this->addTargetOrganisation('IR');
+            $this->addTargetOrganisation('HMRC');
 
             // Reset & re-add keys for safety - must match IRheader keys exactly
-            // GovTalkDetails Keys must match EmpRefs
+            // GovTalkDetails Keys - HMRC sample shows only UTR is required for CT600
             $this->resetMessageKeys();
             $this->addMessageKey('UTR', $this->employer->getCorporationTaxReference());
-            $this->addMessageKey('TaxOfficeNumber', $this->employer->getTaxOfficeNumber());
-            $this->addMessageKey('TaxOfficeReference', $this->employer->getTaxOfficeReference());
             if ($this->vendorId !== '') {
                 $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
             }
@@ -2258,15 +2274,8 @@ class CT600 extends GovTalk
         $xw->writeAttribute('xmlns', self::NS);
         $xw->startElement('IRheader');
 
+        // HMRC sample shows only UTR is required in IRheader Keys for CT600
         $xw->startElement('Keys');
-        $xw->startElement('Key');
-        $xw->writeAttribute('Type', 'TaxOfficeNumber');
-        $xw->text($this->employer->getTaxOfficeNumber());
-        $xw->endElement();
-        $xw->startElement('Key');
-        $xw->writeAttribute('Type', 'TaxOfficeReference');
-        $xw->text($this->employer->getTaxOfficeReference());
-        $xw->endElement();
         if ($this->employer->getCorporationTaxReference()) {
             $xw->startElement('Key');
             $xw->writeAttribute('Type', 'UTR');
@@ -2294,6 +2303,18 @@ class CT600 extends GovTalk
 
 
         $xw->writeElement('DefaultCurrency', 'GBP');
+
+        // Manifest element as per HMRC sample
+        $xw->startElement('Manifest');
+        $xw->startElement('Contains');
+        $xw->startElement('Reference');
+        $xw->writeElement('Namespace', self::NS);
+        $xw->writeElement('SchemaVersion', '2022-v1.99');
+        $xw->writeElement('TopElementName', 'CompanyTaxReturn');
+        $xw->endElement(); // Reference
+        $xw->endElement(); // Contains
+        $xw->endElement(); // Manifest
+
         $xw->startElement('IRmark');
         $xw->writeAttribute('Type', 'generic');
         $xw->text('IRmark+Token');
@@ -3080,11 +3101,13 @@ class CT600 extends GovTalk
             $fyIndex++;
             $rate = $this->financialYearRates[$year] ?? 25.0;
 
-            // Fix for errors 9204 and 9213: Ensure tax equals profit * rate exactly
-            $roundedProfit = round($profit, 2);
-            // Calculate tax as exact multiplication to avoid rounding errors
-            $tax = ($roundedProfit * ($rate / 100));
-            // Round to 2 decimal places for display
+            // Fix for Error 9214: Profit must be rounded to WHOLE NUMBER to match XML output
+            // buildBody() uses wholeMoney() which rounds to 0 decimal places
+            // This ensures CorporationTax (Box 430) = sum of FY taxes (Boxes 395, 410, etc.)
+            $roundedProfit = round($profit, 0);
+            // Calculate tax using same formula as buildBody(): wholeMoney(profit) * (money(rate) / 100)
+            $tax = $roundedProfit * ($rate / 100);
+            // Round tax to 2 decimal places for display
             $displayTax = round($tax, 2);
 
             $financialYears[] = [
@@ -3099,7 +3122,7 @@ class CT600 extends GovTalk
         }
 
         $marginalRelief = $this->calculateMarginalRelief($taxable, $augmented, $grossTax, $augAllocated);
-        return [$financialYears, $grossTax, $marginalRelief];
+        return [$financialYears, round($grossTax, 2), $marginalRelief];
     }
     private function allocateProfitsAcrossFinancialYears(float $amount): array
     {

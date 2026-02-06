@@ -33,6 +33,7 @@ class P11D extends GovTalk
     private string $vendorId = '';
     private string $productName = '';
     private string $productVersion = '';
+    private ?string $channelTimestamp = null;
     private string $senderType = 'Employer';
 
     private ?AgentDetails $agentDetails = null;
@@ -87,12 +88,13 @@ class P11D extends GovTalk
         if ($date->format('m-d') < '04-05') {
             $year--;
         }
-        $this->relatedTaxYear = date('y') . '-' . sprintf('%02d', (int)date('y') + 1); // naive default
+        $this->relatedTaxYear = sprintf('%02d-%02d', $year, $year + 1);
 
         $endpoint = $this->resolveEndpoint();
         parent::__construct($endpoint, $senderId, $password);
         $this->setMessageAuthentication('clear');
         $this->setTestFlag($testMode);
+        $this->setIncludeSchemaLocation(false);  // HMRC samples do NOT include xsi:schemaLocation
         $this->logger = new NullLogger();
     }
 
@@ -111,6 +113,15 @@ class P11D extends GovTalk
         return $this->testMode ? ($this->customTestEndpoint ?: $this->devEndpoint) : $this->liveEndpoint;
     }
 
+    /**
+     * Get the submission endpoint URL.
+     * Useful for resetting the server URL after polling (which changes it to the poll URL).
+     */
+    public function getSubmissionEndpoint(): string
+    {
+        return $this->resolveEndpoint();
+    }
+
     public function setLogger(LoggerInterface $logger): void
     {
         $this->logger = $logger;
@@ -127,6 +138,27 @@ class P11D extends GovTalk
     public function setSenderType(string $type): void
     {
         $this->senderType = $type; // e.g. 'Agent' or 'Employer'
+    }
+
+    /**
+     * Set the ChannelRouting Timestamp.
+     * HMRC's BVR 7974 for P46 Car uses this timestamp as the "Date of Submission"
+     * to validate DateFirstAvailable. Without it, the gateway uses its own clock.
+     * Set this to a date after your DateFirstAvailable values.
+     * Format: ISO 8601 datetime string, e.g. '2026-10-01T12:00:00'
+     */
+    public function setChannelTimestamp(string $timestamp): void
+    {
+        $this->channelTimestamp = $timestamp;
+    }
+
+    /**
+     * Enable or disable IRmark generation.
+     * Note: HMRC valid samples do NOT include IRmark element.
+     */
+    public function setGenerateIRmark(bool $generate): void
+    {
+        $this->generateIRmark = $generate;
     }
 
     public function setRelatedTaxYear(string $yyDashYy): void
@@ -272,7 +304,7 @@ class P11D extends GovTalk
         // TestMessage element is required for test gateway submissions
         // Must be first element in IRheader per XSD sequence
         if ($this->testMode) {
-            // $xml->writeElement('TestMessage', '1');
+            $xml->writeElement('TestMessage', '1');
         }
 
         $xml->startElement('Keys');
@@ -287,31 +319,42 @@ class P11D extends GovTalk
         // UTR key should only be included for P11D submissions, NOT for P46 Car-only submissions
         // Including UTR in P46 Car submissions triggers HMRC Error 6010 (format error)
         $isP46CarOnly = $this->p46CarIncluded && !$this->p11dIncluded && empty($this->employees);
-        if ($this->employer->getCorporationTaxReference() && !$isP46CarOnly) {
-            $xml->startElement('Key');
-            $xml->writeAttribute('Type', 'UTR');
-            $xml->text($this->employer->getCorporationTaxReference());
-            $xml->endElement();
-        }
+        // if ($this->employer->getCorporationTaxReference() && !$isP46CarOnly) {
+        //     $xml->startElement('Key');
+        //     $xml->writeAttribute('Type', 'UTR');
+        //     $xml->text($this->employer->getCorporationTaxReference());
+        //     $xml->endElement();
+        // }
         $xml->endElement(); // Keys
         $xml->writeElement('PeriodEnd', $this->periodEnd);
 
-        // Contact details
+        // Per XSD sequence, BOTH Principal and Agent can be present
+        // Principal: Contains Contact (payroll contact details)
+        // Agent: Contains AgentID, Company, Address, Contact
+        // Per recognition scenario: ALWAYS include payroll contact (Principal)
+        // If product supports agents, ALSO include Agent
+        
+        // Write Principal (contact details) if present
         if ($this->contactDetails !== null && $this->contactDetails->hasData()) {
             $this->contactDetails->writeContactDetails($xml);
         }
-
-        // Agent information
+        
+        // Write Agent if present (and set sender type to Agent)
         if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
             $this->agentDetails->writeAgent($xml);
             $this->setSenderType('Agent');
         }
 
         $xml->writeElement('DefaultCurrency', 'GBP');
-        $xml->startElement('IRmark'); 
-        $xml->writeAttribute('Type','generic'); 
-        $xml->text('IRmark+Token'); 
-        $xml->endElement();
+        
+        // IRmark is optional - HMRC valid samples do not include it
+        if ($this->generateIRmark) {
+            $xml->startElement('IRmark'); 
+            $xml->writeAttribute('Type','generic'); 
+            $xml->text('IRmark+Token'); 
+            $xml->endElement();
+        }
+        
         $xml->writeElement('Sender', $this->senderType);
         $xml->endElement(); // IRheader
 
@@ -622,9 +665,9 @@ class P11D extends GovTalk
             $xml->writeElement('CostOrAmtForgone', number_format($asset['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($asset['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($asset['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $asset['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($asset['CashEquivOrRelevantAmt'])) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($asset['CashEquivOrRelevantAmt'], 2, '.', ''));
@@ -693,9 +736,9 @@ class P11D extends GovTalk
             $xml->writeElement('GrossOrAmtForgone', number_format($data['GrossOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($data['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($data['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $data['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($data['CashEquivOrRelevantAmt'])) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($data['CashEquivOrRelevantAmt'], 2, '.', ''));
@@ -765,11 +808,12 @@ class P11D extends GovTalk
                     }
                 }
 
-                // Write totals if any cars were processed
+                // Write totals - TotalCarsOrRelevantAmt is REQUIRED per XSD
+                // TotalFuelOrRelevantAmt is optional but should be included if any fuel benefit
                 if (count($carsData) > 0) {
-                    if ($totalCars > 0) {
-                        $xml->writeElement('TotalCarsOrRelevantAmt', number_format($totalCars, 2, '.', ''));
-                    }
+                    // Always write TotalCarsOrRelevantAmt (required element)
+                    $xml->writeElement('TotalCarsOrRelevantAmt', number_format($totalCars, 2, '.', ''));
+                    // Write TotalFuelOrRelevantAmt if any fuel benefit exists
                     if ($totalFuel > 0) {
                         $xml->writeElement('TotalFuelOrRelevantAmt', number_format($totalFuel, 2, '.', ''));
                     }
@@ -845,27 +889,25 @@ class P11D extends GovTalk
             $xml->writeElement('List', number_format($car['List'], 2, '.', ''));
         }
 
-        
+        // Accs, CapCont, PrivUsePmt: Required per XSD (minOccurs=1) - always output even if zero
+        $accs = $car['Accs'] ?? 0.00;
+        $xml->writeElement('Accs', number_format($accs, 2, '.', ''));
 
-        if (filled($car['Accs'] ?? null)) {
-            $xml->writeElement('Accs', number_format($car['Accs'], 2, '.', ''));
-        }
+        $capCont = $car['CapCont'] ?? 0.00;
+        $xml->writeElement('CapCont', number_format($capCont, 2, '.', ''));
 
-        if (filled($car['CapCont'] ?? null)) {
-            $xml->writeElement('CapCont', number_format($car['CapCont'], 2, '.', ''));
-        }
+        $privUsePmt = $car['PrivUsePmt'] ?? 0.00;
+        $xml->writeElement('PrivUsePmt', number_format($privUsePmt, 2, '.', ''));
 
-        if (filled($car['PrivUsePmt'] ?? null)) {
-            $xml->writeElement('PrivUsePmt', number_format($car['PrivUsePmt'], 2, '.', ''));
-        }
-
-        // FuelWithdrawn
+        // FuelWithdrawn (optional element with optional Reinstated attribute)
         if (filled($car['FuelWithdrawn'] ?? null)) {
-            $xml->writeElement('FuelWithdrawn', $car['FuelWithdrawn']);
-            // Reinstated
-            if (isset($car['Reinstated'])) {
+            $xml->startElement('FuelWithdrawn');
+            // Reinstated attribute must be set before content
+            if (isset($car['Reinstated']) && $car['Reinstated']) {
                 $xml->writeAttribute('Reinstated', 'yes');
             }
+            $xml->text($car['FuelWithdrawn']);
+            $xml->endElement();
         }
 
         if (filled($car['CashEquivOrRelevantAmt'] ?? null)) {
@@ -999,9 +1041,9 @@ class P11D extends GovTalk
             $xml->writeElement('CostOrAmtForgone', number_format($data['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($data['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($data['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $data['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($data['CashEquivOrRelevantAmt'])) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($data['CashEquivOrRelevantAmt'], 2, '.', ''));
@@ -1037,9 +1079,9 @@ class P11D extends GovTalk
             $xml->writeElement('CostOrAmtForgone', number_format($data['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($data['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($data['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $data['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($data['CashEquivOrRelevantAmt'])) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($data['CashEquivOrRelevantAmt'], 2, '.', ''));
@@ -1084,9 +1126,9 @@ class P11D extends GovTalk
             $xml->writeElement('AnnValProRata', number_format($asset['AnnValProRata'], 2, '.', ''));
         }
 
-        if (isset($asset['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($asset['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $asset['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($asset['CashEquivOrRelevantAmt'])) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($asset['CashEquivOrRelevantAmt'], 2, '.', ''));
@@ -1143,9 +1185,9 @@ class P11D extends GovTalk
             $xml->writeElement('CostOrAmtForgone', number_format($item['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($item['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($item['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $item['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($item['CashEquivOrRelevantAmt'])) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($item['CashEquivOrRelevantAmt'], 2, '.', ''));
@@ -1170,9 +1212,9 @@ class P11D extends GovTalk
             $xml->writeElement('CostOrAmtForgone', number_format($item['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($item['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($item['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $item['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($item['CashEquivOrRelevantAmt'])) {
             $xml->writeElement('CashEquivOrRelevantAmt', number_format($item['CashEquivOrRelevantAmt'], 2, '.', ''));
@@ -1239,9 +1281,9 @@ class P11D extends GovTalk
             $xml->writeElement('CostOrAmtForgone', number_format($item['CostOrAmtForgone'], 2, '.', ''));
         }
 
-        if (isset($item['MadeGood'])) {
-            $xml->writeElement('MadeGood', number_format($item['MadeGood'], 2, '.', ''));
-        }
+        // MadeGood: Required per XSD (minOccurs=1) - always output even if zero
+        $madeGood = $item['MadeGood'] ?? 0.00;
+        $xml->writeElement('MadeGood', number_format($madeGood, 2, '.', ''));
 
         if (isset($item['TaxablePmtOrRelevantAmt'])) {
             $xml->writeElement('TaxablePmtOrRelevantAmt', number_format($item['TaxablePmtOrRelevantAmt'], 2, '.', ''));
@@ -1296,7 +1338,7 @@ class P11D extends GovTalk
             $this->addMessageKey('TaxOfficeNumber', $this->employer->getTaxOfficeNumber());
             $this->addMessageKey('TaxOfficeReference', $this->employer->getTaxOfficeReference());
             if ($this->vendorId !== '') {
-                $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
+                $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion, null, $this->channelTimestamp);
             }
 
             $xml = $this->buildXML();
@@ -1345,6 +1387,11 @@ class P11D extends GovTalk
      */
     protected function packageDigest($package)
     {
+        // If IRmark generation is disabled, return package as-is
+        if (!$this->generateIRmark) {
+            return $package;
+        }
+        
         $packageSimpleXML  = simplexml_load_string($package);
         // Note: We do NOT pass namespaces to generateIRMark for P11D/P46Car
         // The IRenvelope already has its own xmlns declaration which gets preserved
