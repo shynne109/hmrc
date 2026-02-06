@@ -83,6 +83,15 @@ class FPS extends GovTalk
         return $this->testMode ? ($this->customTestEndpoint ?: $this->devEndpoint) : $this->liveEndpoint;
     }
 
+    /**
+     * Get the submission endpoint URL.
+     * Useful for resetting the server URL after polling (which changes it to the poll URL).
+     */
+    public function getSubmissionEndpoint(): string
+    {
+        return $this->resolveEndpoint();
+    }
+
     public function setSoftwareMeta(string $vendorId, string $productName, string $productVersion): void
     {
         $this->vendorId = $vendorId; // HMRC expect Vendor ID (4 digits) as URI
