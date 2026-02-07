@@ -46,6 +46,7 @@ class FPS extends GovTalk
     private string $productName = '';
     private string $productVersion = '';
     private ?string $channelTimestamp = null;
+    private ?string $periodEnd = null;
     private string $senderType = 'Employer';
 
     private ?AgentDetails $agentDetails = null;
@@ -109,6 +110,18 @@ class FPS extends GovTalk
     public function setChannelTimestamp(string $timestamp): void
     {
         $this->channelTimestamp = $timestamp;
+    }
+
+    /**
+     * Set the PeriodEnd date for the IRheader.
+     * This is the date up to which the information in the submission relates.
+     * If not set, defaults to today's date.
+     *
+     * @param string $date Date in Y-m-d format, e.g. '2026-04-05'
+     */
+    public function setPeriodEnd(string $date): void
+    {
+        $this->periodEnd = $date;
     }
 
     public function setRelatedTaxYear(string $yyDashYy): void
@@ -229,7 +242,7 @@ class FPS extends GovTalk
         $xw->text($this->employer->getTaxOfficeReference()); 
         $xw->endElement();
         $xw->endElement(); // Keys
-        $xw->writeElement('PeriodEnd', date('Y-m-d'));
+        $xw->writeElement('PeriodEnd', $this->periodEnd ?? date('Y-m-d'));
 
         if ($this->contactDetails !== null && $this->contactDetails->hasData()) {
             $this->contactDetails->writeContactDetails($xw);
