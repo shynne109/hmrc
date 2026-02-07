@@ -45,6 +45,7 @@ class FPS extends GovTalk
     private string $vendorId = '';
     private string $productName = '';
     private string $productVersion = '';
+    private ?string $channelTimestamp = null;
     private string $senderType = 'Employer';
 
     private ?AgentDetails $agentDetails = null;
@@ -97,6 +98,17 @@ class FPS extends GovTalk
         $this->vendorId = $vendorId; // HMRC expect Vendor ID (4 digits) as URI
         $this->productName = $productName;
         $this->productVersion = $productVersion;
+    }
+
+    /**
+     * Set the ChannelRouting Timestamp.
+     * Some BVR validations (e.g. LeavingDate, payment dates) use this as the
+     * reference "today" date. Set to a date that satisfies date constraints.
+     * Format: ISO 8601 datetime string, e.g. '2026-03-20T12:00:00'
+     */
+    public function setChannelTimestamp(string $timestamp): void
+    {
+        $this->channelTimestamp = $timestamp;
     }
 
     public function setRelatedTaxYear(string $yyDashYy): void
@@ -625,7 +637,7 @@ class FPS extends GovTalk
         $this->addMessageKey('TaxOfficeReference', $this->employer->getTaxOfficeReference());
 
         if ($this->vendorId !== '') {
-            $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
+            $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion, null, $this->channelTimestamp);
         }
 
         $body = $this->buildFpsBodyXml();
