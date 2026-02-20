@@ -47,12 +47,12 @@ class CompaniesHouseProvider extends GenericProvider
      */
     private function getOptionsFromEnvironment(): array
     {
-        $identityHost = Environment::getInstance()->isLive() 
-            ? CompaniesHouseURL::LIVE_IDENTITY 
+        $identityHost = Environment::getInstance()->isLive()
+            ? CompaniesHouseURL::LIVE_IDENTITY
             : CompaniesHouseURL::SANDBOX_IDENTITY;
 
         return [
-            'urlAuthorize'            => "{$identityHost}/oauth/authorize",
+            'urlAuthorize'            => "{$identityHost}/oauth2/authorise",
             'urlAccessToken'          => "{$identityHost}/oauth/token",
             'urlResourceOwnerDetails' => "{$identityHost}/oauth/userinfo",
         ];
@@ -97,11 +97,12 @@ class CompaniesHouseProvider extends GenericProvider
 
     /**
      * Get the current state parameter (useful for CSRF protection)
+     * Fixed: was recursively calling itself
      *
      * @return string
      */
     public function getState(): string
     {
-        return $this->getState();
+        return parent::getState();
     }
 }
