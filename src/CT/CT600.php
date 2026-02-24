@@ -2501,7 +2501,12 @@ class CT600 extends GovTalk
         $xw->startElement('Income');
         $xw->startElement('Trading');
         $xw->writeElement('Profits', $this->wholeMoney($this->tradingProfits));
-        $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForward));
+        // HMRC Rule 9150: If Box 160 (LossesBroughtForward in Trading) is completed then
+        // Box 155 (Profits) must be greater than 0. To comply, only emit LossesBroughtForward
+        // when there are actual trading profits and a positive brought-forward loss to set off.
+        if ($this->tradingProfits > 0.0 && $this->lossesBroughtForward > 0.0) {
+            $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForward));
+        }
         $xw->writeElement('NetProfits', $this->money($tradingNetProfits));
         $xw->endElement();
         $xw->writeElement('NonTradingLoanProfitsAndGains', $this->money($this->nonTradingLoanProfitsAndGains));
