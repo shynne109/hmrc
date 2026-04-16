@@ -1080,7 +1080,7 @@ class CT600 extends GovTalk
         $this->shares = $v;
         return $this;
     }
-    
+
     public function setSignificantEvent(?string $v): self
     {
         $this->significantEvent = $v;
@@ -1121,7 +1121,6 @@ class CT600 extends GovTalk
         $this->lossesAndDeficits = $v;
         return $this;
     }
-    //public function setCommunityInvestmentRelief(?float $v): self { $this->communityInvestmentRelief = $v; return $this; }
     public function setOtherReliefs(?float $v): self
     {
         $this->otherReliefs = $v;
@@ -1509,13 +1508,10 @@ class CT600 extends GovTalk
             $errors[] = "Error 5004: At least one key must exist in the IRHeader";
         }
 
-        // Note: Error 5005 validation would require access to message keys from parent class
-        // This is handled at the GovTalk level, so we skip it here
-
         // Company Information Validation (Error 9100-9108)
         $this->validateCompanyInformation($errors);
 
-        // Return Info Summary Validation (Error 9109-9136) 
+        // Return Info Summary Validation (Error 9109-9136)
         $this->validateReturnInfoSummary($errors);
 
         // Tax Calculation Validation (Error 9138-9400+)
@@ -1531,9 +1527,6 @@ class CT600 extends GovTalk
 
     private function validateCompanyInformation(array &$errors): void
     {
-        // Error 9100: UTR in Box 3 must match IRheader key
-        // This is handled in validateIdentifiers()
-
         // Error 9101: Return period must not be longer than 12 months
         if (!empty($this->periodFrom) && !empty($this->periodTo)) {
             $fromDate = new \DateTime($this->periodFrom);
@@ -1598,14 +1591,6 @@ class CT600 extends GovTalk
 
     private function validateSupplementaryPages(array &$errors): void
     {
-        // These validations would check if supplementary forms are present when required
-        // Implementation depends on how supplementary forms are tracked in the system
-
-        // Error 9120-9137: Supplementary form requirements based on New return type
-        if ($this->returnType === 'new') {
-            $this->validateNewReturnSupplementaryRequirements($errors);
-        }
-
         // Error 9127: If Box 120 is completed then Box 200 must be completed
         if (!empty($this->significantEvent) && empty($this->principalBusinessActivity)) {
             $errors[] = "Error 9127: If Box 120 is completed then Box 200 must be completed";
@@ -1618,7 +1603,7 @@ class CT600 extends GovTalk
             }
         }
 
-        // Error 9130: If Box 130 is completed then Box 645 must be completed  
+        // Error 9130: If Box 130 is completed then Box 645 must be completed
         if (!empty($this->thisPeriod) && empty($this->goodsExported)) {
             $errors[] = "Error 9130: If Box 130 is completed then Box 645 must be completed";
         }
@@ -1635,8 +1620,11 @@ class CT600 extends GovTalk
 
         // Error 9135: Box G90 must be completed if Boxes 125 and 280 are completed
         if (!empty($this->significantEvent) && $this->qualifyingDonations > 0) {
-            // This would require tracking Box G90 separately
             $errors[] = "Error 9135: Box G90 must be completed if Boxes 125 and 280 are completed";
+        }
+
+        if ($this->returnType === 'new') {
+            $this->validateNewReturnSupplementaryRequirements($errors);
         }
     }
 
@@ -1726,12 +1714,8 @@ class CT600 extends GovTalk
         }
 
         // Error 9146: Box 430 must be completed if Box 345 or Box 395 is completed
-        // Only validate if there are actual chargeable gains and no corporation tax has been calculated
-        if (($this->chargeableGains > 0 || $this->grossGains > 1.0) && $this->corporationTax <= 0 && ($this->chargeableGains > 0 || $this->grossGains > 1.0)) {
-            // Only trigger if we have meaningful gains and no tax calculation
-            if ($this->chargeableGains > 0 && $this->corporationTax <= 0) {
-                $errors[] = "Error 9146: Box 430 must be completed if Box 345 or Box 395 is completed";
-            }
+        if ($this->chargeableGains > 0 && $this->corporationTax <= 0) {
+            $errors[] = "Error 9146: Box 430 must be completed if Box 345 or Box 395 is completed";
         }
 
         // Error 9148: Box 165 must be completed if Box 155 is greater than 0
@@ -1756,21 +1740,16 @@ class CT600 extends GovTalk
             $errors[] = "Error 9151: Box 165 must equal Box 155 minus Box 160";
         }
 
-        // Additional tax calculation rules
         $this->validateTaxRateRules($errors);
         $this->validateFinancialCalculations($errors);
     }
 
     private function validateFinancialCalculations(array &$errors): void
     {
-        // Additional comprehensive financial validation rules
-
-        // Validate profits before deductions calculation
         $calculatedProfitsBeforeDeductions = $this->tradingProfits + $this->nonTradingLoanProfitsAndGains +
             $this->propertyBusinessIncome + $this->nonTradingGainsIntangibles +
             $this->tonnageTaxProfits + $this->otherIncome + $this->chargeableGains;
 
-        // Validate deductions don't exceed profits
         $totalDeductions = $this->capitalAllowances + $this->managementExpenses + $this->ukPropertyBusinessLosses +
             $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits + $this->nonTradingLossIntangibles +
             $this->tradingLosses + $this->nonTradeCapitalAllowances;
@@ -1779,22 +1758,15 @@ class CT600 extends GovTalk
             $errors[] = "Financial validation: Total deductions cannot exceed total profits before deductions";
         }
 
-        // Validate corporation tax calculation consistency
         if ($this->corporationTax > 0 && $this->profitsBeforeDonationsAndGroupRelief <= 0) {
             $errors[] = "Financial validation: Corporation tax cannot be charged on zero or negative profits";
         }
 
-        // Validate marginal relief consistency
-        if ($this->ringFenceProfitsIncluded == 0 && strtotime($this->periodTo) > strtotime('2023-03-31')) {
-            // Marginal relief should be zero for non-ring fence companies after March 31, 2023
-        }
-
-        // Validate tax repayable/payable consistency
         if ($this->taxRepayable > 0 && $this->taxPayable > 0) {
             $errors[] = "Financial validation: Cannot have both tax repayable and tax payable";
         }
 
-        // Error 9345: If Box 510 is completed then Box 520 must equal Box 515 minus Box 510
+        // Error 9345: Box 520 = Box 515 - Box 510
         if ($this->taxChargeable > 0) {
             $expectedTaxRepayable = max(0.0, $this->deductedIncomeTax - $this->taxChargeable);
             if (abs($this->taxRepayable - $expectedTaxRepayable) > 0.01) {
@@ -1802,7 +1774,7 @@ class CT600 extends GovTalk
             }
         }
 
-        // Error 9347: If Box 510 is completed then Box 525 must equal Box 510 minus Box 515. If the result is negative please enter 0 (zero).
+        // Error 9347: Box 525 = max(0, Box 510 - Box 515)
         if ($this->taxChargeable > 0) {
             $expectedTaxPayable = max(0.0, $this->taxChargeable - $this->deductedIncomeTax);
             if (abs($this->taxPayable - $expectedTaxPayable) > 0.01) {
@@ -1816,7 +1788,7 @@ class CT600 extends GovTalk
         // Error 9143: Company type 3, 9, 10, 11 must use specific tax rates
         $restrictedTypes = ['3', '9', '10', '11'];
         if (in_array($this->companyType, $restrictedTypes)) {
-            $validRates = [19.0, 25.0]; // FULL RATE OF CT or CT RATE FOR NI TRADING PROFITS
+            $validRates = [19.0, 25.0];
             if (!in_array($this->corporationTaxRate, $validRates)) {
                 $errors[] = "Error 9143: Company type {$this->companyType} must use applicable tax rate from FULL RATE OF CT or CT RATE FOR NI TRADING PROFITS";
             }
@@ -1825,7 +1797,7 @@ class CT600 extends GovTalk
         // Error 9145: Company type 6, 7, 8 must use specific tax rates
         $specialTypes = ['6', '7', '8'];
         if (in_array($this->companyType, $specialTypes)) {
-            $validRates = [19.0, 25.0]; // FULL RATE OF CT, SMALL CO RATE OF CT or CT RATE FOR NI TRADING PROFITS
+            $validRates = [19.0, 25.0];
             if (!in_array($this->corporationTaxRate, $validRates)) {
                 $errors[] = "Error 9145: Company type {$this->companyType} must use applicable tax rate from FULL RATE OF CT, SMALL CO RATE OF CT or CT RATE FOR NI TRADING PROFITS";
             }
@@ -1833,7 +1805,6 @@ class CT600 extends GovTalk
 
         // Error 9147: NI trading profits rate requires Box 586 completion
         $niTradingTypes = ['0', '3', '4', '6', '7', '8', '9'];
-        // Only validate if specifically using NI trading profits rate AND Northern Ireland is configured
         if (
             in_array($this->companyType, $niTradingTypes) &&
             isset($this->northernIreland['NItradingActivity']) &&
@@ -1846,37 +1817,23 @@ class CT600 extends GovTalk
 
     private function validateCT600PSupplementary(array &$errors): void
     {
-        // This section implements Error 9001-9089 for CT600P supplementary form
-        // These are complex AVEC/VGEC (Audio-Visual Expenditure Credit/Video Games Expenditure Credit) calculations
-
         if (!$this->ct600pPresent) {
-            return; // No CT600P validation needed if form not present
+            return;
         }
 
-        // Error 9001: CT600P requires completion of specific sections
         if ($this->ct600pPresent && !$this->hasPreStep1OrStep1OrCreativeReliefs()) {
             $errors[] = "Error 9001: Supplementary form CT600P is present so at least one of 'Pre-step 1 restriction' section, 'Step 1' section or 'Cultural reliefs and film, high end TV, children's TV, animation and video game tax relief' section must be completed";
         }
 
-        // Audio-Visual Expenditure Credit validation (Error 9015-9025)
         $this->validateAVECRules($errors);
-
-        // Video Games Expenditure Credit validation (Error 9021-9025)
         $this->validateVGECRules($errors);
-
-        // Pre-step 1 restriction validation (Error 9026-9034)
         $this->validatePreStep1Rules($errors);
-
-        // Step 1-6 validation (Error 9035-9084)
         $this->validateStepRules($errors);
-
-        // AVEC and VGEC carried forward validation (Error 9085-9089)
         $this->validateCarriedForwardRules($errors);
     }
 
     private function hasPreStep1OrStep1OrCreativeReliefs(): bool
     {
-        // Check if any of the required sections are completed
         $hasPreStep1 = $this->ct600pData['P55'] > 0 || $this->ct600pData['P60'] > 0;
         $hasStep1 = $this->ct600pData['P95'] > 0 || $this->ct600pData['P100'] > 0;
         $hasCreativeReliefs = $this->ct600pData['P30C'] > 0 || $this->ct600pData['P45C'] > 0;
@@ -1886,7 +1843,6 @@ class CT600 extends GovTalk
 
     private function validateAVECRules(array &$errors): void
     {
-        // Error 9015: Audio-Visual section requires completion of specific boxes
         $avecSectionPresent = $this->ct600pData['P5A'] > 0 || $this->ct600pData['P10A'] > 0 ||
             $this->ct600pData['P15A'] > 0 || $this->ct600pData['P20A'] > 0 ||
             $this->ct600pData['P25A'] > 0;
@@ -1897,33 +1853,28 @@ class CT600 extends GovTalk
             $errors[] = "Error 9015: If the 'Audio-Visual Expenditure Credit' section is present then Boxes P5, P10, P15, P20 or P25 must be completed";
         }
 
-        // Error 9016: Box P30A must equal sum of P5A, P10A, P15A, P20A, P25A
         $expectedP30A = $this->ct600pData['P5A'] + $this->ct600pData['P10A'] + $this->ct600pData['P15A'] +
             $this->ct600pData['P20A'] + $this->ct600pData['P25A'];
         if (abs($this->ct600pData['P30A'] - $expectedP30A) > 0.01) {
             $errors[] = "Error 9016: Box P30A must equal the sum of Boxes P5A, P10A, P15A, P20A and P25A";
         }
 
-        // Error 9017: Box P30B must equal sum of P5B, P10B, P15B, P20B, P25B
         $expectedP30B = $this->ct600pData['P5B'] + $this->ct600pData['P10B'] + $this->ct600pData['P15B'] +
             $this->ct600pData['P20B'] + $this->ct600pData['P25B'];
         if (abs($this->ct600pData['P30B'] - $expectedP30B) > 0.01) {
             $errors[] = "Error 9017: Box P30B must equal the sum of Boxes P5B, P10B, P15B, P20B and P25B";
         }
 
-        // Error 9018: Box P75 must be completed if Box P30B is completed
         if ($this->ct600pData['P30B'] > 0 && $this->ct600pData['P75'] <= 0) {
             $errors[] = "Error 9018: Box P75 must be completed if Box P30B is completed";
         }
 
-        // Error 9019: Box P30C must equal sum of P5C, P10C, P15C, P20C, P25C
         $expectedP30C = $this->ct600pData['P5C'] + $this->ct600pData['P10C'] + $this->ct600pData['P15C'] +
             $this->ct600pData['P20C'] + $this->ct600pData['P25C'];
         if (abs($this->ct600pData['P30C'] - $expectedP30C) > 0.01) {
             $errors[] = "Error 9019: Box P30C must equal the sum of Boxes P5C, P10C, P15C, P20C and P25C";
         }
 
-        // Error 9020: Box P80 must be completed if Box P30C is completed
         if ($this->ct600pData['P30C'] > 0 && $this->ct600pData['P80'] <= 0) {
             $errors[] = "Error 9020: Box P80 must be completed if Box P30C is completed";
         }
@@ -1931,27 +1882,22 @@ class CT600 extends GovTalk
 
     private function validateVGECRules(array &$errors): void
     {
-        // Error 9021: Box P45A must equal Box P35A
         if (abs($this->ct600pData['P45A'] - $this->ct600pData['P35A']) > 0.01) {
             $errors[] = "Error 9021: Box P45A must equal Box P35A";
         }
 
-        // Error 9022: Box P45B must equal Box P35B
         if (abs($this->ct600pData['P45B'] - $this->ct600pData['P35B']) > 0.01) {
             $errors[] = "Error 9022: Box P45B must equal Box P35B";
         }
 
-        // Error 9023: Box P85 must be completed if Box P45B is completed
         if ($this->ct600pData['P45B'] > 0 && $this->ct600pData['P85'] <= 0) {
             $errors[] = "Error 9023: Box P85 must be completed if Box P45B has been completed";
         }
 
-        // Error 9024: Box P45C must equal Box P35C
         if (abs($this->ct600pData['P45C'] - $this->ct600pData['P35C']) > 0.01) {
             $errors[] = "Error 9024: Box P45C must equal Box P35C";
         }
 
-        // Error 9025: Box P90 must be completed if Box P45C is completed
         if ($this->ct600pData['P45C'] > 0 && $this->ct600pData['P90'] <= 0) {
             $errors[] = "Error 9025: Box P90 must be completed if Box P45C";
         }
@@ -1962,52 +1908,43 @@ class CT600 extends GovTalk
         $hasPreStep1 = $this->ct600pData['P55'] > 0 || $this->ct600pData['P60'] > 0;
 
         if ($hasPreStep1) {
-            // Error 9026: AVEC and VGEC carried forward section must be completed
             if ($this->ct600pData['P195'] <= 0 && $this->ct600pData['P200'] <= 0) {
                 $errors[] = "Error 9026: The 'AVEC and VGEC carried forward' section must be completed if the 'Pre-step 1 restriction' section is completed";
             }
 
-            // Error 9027: P55 calculation based on Box 530 and 475
-            $box530 = $this->taxChargeable; // Box 530 is tax chargeable
-            $box475 = $this->netCorporationTaxLiability; // Box 475 is net corporation tax liability
+            $box530 = $this->taxChargeable;
+            $box475 = $this->netCorporationTaxLiability;
             $expectedP55 = ($box530 < $box475) ? $box475 - $box530 : 0;
             if (abs($this->ct600pData['P55'] - $expectedP55) > 0.01) {
                 $errors[] = "Error 9027: If Box 530 is less than Box 475 then Box P55 must equal Box 475 minus Box 530 otherwise Box P55 must equal 0";
             }
 
-            // Error 9028: Box P60 must not be greater than Box P50
             if ($this->ct600pData['P60'] > $this->ct600pData['P50']) {
                 $errors[] = "Error 9028: Box P60 must not be greater than Box P50";
             }
 
-            // Error 9029: Box P60 must not be greater than Box P55
             if ($this->ct600pData['P60'] > $this->ct600pData['P55']) {
                 $errors[] = "Error 9029: Box P60 must not be greater than Box P55";
             }
 
-            // Error 9030: Box P230 must be completed if Box P60 is completed
             if ($this->ct600pData['P60'] > 0 && $this->ct600pData['P230'] <= 0) {
                 $errors[] = "Error 9030: Box P230 must be completed if Box P60 is completed";
             }
 
-            // Error 9031: Box P65 must equal Box P50 minus Box P60
             $expectedP65 = $this->ct600pData['P50'] - $this->ct600pData['P60'];
             if (abs($this->ct600pData['P65'] - $expectedP65) > 0.01) {
                 $errors[] = "Error 9031: Box P65 must equal Box P50 minus Box P60";
             }
 
-            // Error 9032: Box P65 must equal Box P195
             if (abs($this->ct600pData['P65'] - $this->ct600pData['P195']) > 0.01) {
                 $errors[] = "Error 9032: Box P65 must equal Box P195";
             }
 
-            // Error 9033: Box P70 must equal Box P55 minus Box P60
             $expectedP70 = $this->ct600pData['P55'] - $this->ct600pData['P60'];
             if (abs($this->ct600pData['P70'] - $expectedP70) > 0.01) {
                 $errors[] = "Error 9033: Box P70 must equal Box P55 minus Box P60";
             }
 
-            // Error 9034: Box P70 must equal Box P100
             if (abs($this->ct600pData['P70'] - $this->ct600pData['P100']) > 0.01) {
                 $errors[] = "Error 9034: Box P70 must equal Box P100";
             }
@@ -2016,10 +1953,7 @@ class CT600 extends GovTalk
 
     private function validateStepRules(array &$errors): void
     {
-        // Step 1 validations (Error 9035-9054)
         $this->validateStep1Rules($errors);
-
-        // Step 2 validations (Error 9055-9063)
         $this->validateStep2Rules($errors);
     }
 
@@ -2028,7 +1962,6 @@ class CT600 extends GovTalk
         $hasStep1 = $this->ct600pData['P100'] > 0;
 
         if ($hasStep1) {
-            // Error 9036-9037: P75 validation with P30B
             if ($this->ct600pData['P75'] > 0 && $this->ct600pData['P30B'] <= 0) {
                 $errors[] = "Error 9036: Box P75 can only be completed if Box P30B is completed";
             }
@@ -2036,7 +1969,6 @@ class CT600 extends GovTalk
                 $errors[] = "Error 9037: Box P75 must equal Box P30B";
             }
 
-            // Error 9038-9039: P80 validation with P30C
             if ($this->ct600pData['P80'] > 0 && $this->ct600pData['P30C'] <= 0) {
                 $errors[] = "Error 9038: Box P80 can only be completed if Box P30C is completed";
             }
@@ -2044,7 +1976,6 @@ class CT600 extends GovTalk
                 $errors[] = "Error 9039: Box P80 must equal Box P30C";
             }
 
-            // Error 9040-9041: P85 validation with P45B
             if ($this->ct600pData['P85'] > 0 && $this->ct600pData['P45B'] <= 0) {
                 $errors[] = "Error 9040: Box P85 can only be completed if Box P45B is completed";
             }
@@ -2052,7 +1983,6 @@ class CT600 extends GovTalk
                 $errors[] = "Error 9041: Box P85 must equal Box P45B";
             }
 
-            // Error 9042/9044: P90 validation with P45C
             if ($this->ct600pData['P90'] > 0 && $this->ct600pData['P45C'] <= 0) {
                 $errors[] = "Error 9042: Box P90 can only be completed if Box P45C is completed";
             }
@@ -2060,13 +1990,10 @@ class CT600 extends GovTalk
                 $errors[] = "Error 9044: Box P90 must equal Box P45C";
             }
 
-            // Error 9045: Box P95 must equal sum of P80 and P90
             $expectedP95 = $this->ct600pData['P80'] + $this->ct600pData['P90'];
             if (abs($this->ct600pData['P95'] - $expectedP95) > 0.01) {
                 $errors[] = "Error 9045: Box P95 must equal the sum of Boxes P80 and P90";
             }
-
-            // Additional Step 1 validations continue...
         }
     }
 
@@ -2075,45 +2002,35 @@ class CT600 extends GovTalk
         $hasStep2 = ($this->ct600pData['P95'] - $this->ct600pData['P115']) > 0;
 
         if ($hasStep2) {
-            // Error 9057: Box P120 must equal Box P95 minus Box P115
             $expectedP120 = $this->ct600pData['P95'] - $this->ct600pData['P115'];
             if (abs($this->ct600pData['P120'] - $expectedP120) > 0.01) {
                 $errors[] = "Error 9057: Box P120 must equal Box P95 minus Box P115";
             }
-
-            // Additional Step 2 validations...
         }
     }
-
-
 
     private function validateCarriedForwardRules(array &$errors): void
     {
         $hasCarriedForward = $this->ct600pData['P195'] > 0 || $this->ct600pData['P200'] > 0;
 
         if ($hasCarriedForward) {
-            // Error 9085: Carried forward section requires Pre-step 1 or Step 2
             $hasPreStep1OrStep2 = $this->ct600pData['P55'] > 0 || $this->ct600pData['P125'] > 0;
             if (!$hasPreStep1OrStep2) {
                 $errors[] = "Error 9085: If the 'AVEC and VGEC carried forward' section is present then the 'Pre-step 1 restriction' section or the Step 2 section must be completed";
             }
 
-            // Error 9086: Box P195 must equal Box P65
             if (abs($this->ct600pData['P195'] - $this->ct600pData['P65']) > 0.01) {
                 $errors[] = "Error 9086: Box P195 must equal Box P65";
             }
 
-            // Error 9087: Box P200 must equal Box P140
             if (abs($this->ct600pData['P200'] - $this->ct600pData['P140']) > 0.01) {
                 $errors[] = "Error 9087: Box P200 must equal Box P140";
             }
 
-            // Error 9088: If Box P205 is completed then Box P215 must be completed
             if ($this->ct600pData['P205'] > 0 && $this->ct600pData['P215'] <= 0) {
                 $errors[] = "Error 9088: If Box P205 is completed then Box P215 must be completed";
             }
 
-            // Error 9089: Box P205 must not be greater than sum of P195 and P200
             $maxP205 = $this->ct600pData['P195'] + $this->ct600pData['P200'];
             if ($this->ct600pData['P205'] > $maxP205) {
                 $errors[] = "Error 9089: Box P205 must not be greater than the sum of Boxes P195 and P200";
@@ -2132,14 +2049,11 @@ class CT600 extends GovTalk
             $this->setMessageTransformation('XML');
             $this->addTargetOrganisation('HMRC');
 
-            // Reset & re-add keys for safety - must match IRheader keys exactly
-            // GovTalkDetails Keys - HMRC sample shows only UTR is required for CT600
             $this->resetMessageKeys();
             $this->addMessageKey('UTR', $this->employer->getCorporationTaxReference());
             if ($this->vendorId !== '') {
                 $this->setChannelRoute($this->vendorId, $this->productName, $this->productVersion);
             }
-            // Calculate tax values before validation to ensure accurate business rule checking
             $this->calculateTaxValues();
             $this->validateBusinessRules();
 
@@ -2180,74 +2094,86 @@ class CT600 extends GovTalk
     }
 
     /**
-     * Calculate tax values to ensure accurate validation
+     * Calculate tax values to ensure accurate validation.
      * This method performs the same calculations as buildBody() but updates class properties
-     * so that validation can check the calculated values rather than manually set ones
+     * so that validation can check the calculated values rather than manually-set ones.
      */
     private function calculateTaxValues(): void
     {
-        // Calculations to avoid validation errors
         $tradingNetProfits = max(0.0, $this->tradingProfits - $this->lossesBroughtForward);
-        $incomeSum = $tradingNetProfits + $this->nonTradingLoanProfitsAndGains + $this->nonLoanAnnuitiesAnnualPaymentsDiscounts + $this->nonUKdividends - $this->deductedIncome + $this->propertyBusinessIncome + $this->nonTradingGainsIntangibles + $this->tonnageTaxProfits + $this->otherIncome;
+        $incomeSum = $tradingNetProfits + $this->nonTradingLoanProfitsAndGains
+            + $this->nonLoanAnnuitiesAnnualPaymentsDiscounts + $this->nonUKdividends
+            - $this->deductedIncome + $this->propertyBusinessIncome
+            + $this->nonTradingGainsIntangibles + $this->tonnageTaxProfits + $this->otherIncome;
         $netChargeableGains = max(0.0, $this->grossGains - $this->allowableLosses);
-        $profitsBeforeOtherDeductions = $incomeSum + $netChargeableGains - $this->lossesBroughtForwardOverall - $this->nonTradeDeficitsOnLoans;
-        $deductionsTotal = $this->unquotedShares + $this->managementExpenses + $this->ukPropertyBusinessLosses + $this->capitalAllowances + $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits + $this->nonTradingLossIntangibles + $this->tradingLosses + $this->tradingLossesCarriedForward + $this->nonTradeCapitalAllowances;
+        $profitsBeforeOtherDeductions = $incomeSum + $netChargeableGains
+            - $this->lossesBroughtForwardOverall - $this->nonTradeDeficitsOnLoans;
+        $deductionsTotal = $this->unquotedShares + $this->managementExpenses
+            + $this->ukPropertyBusinessLosses + $this->capitalAllowances
+            + $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits
+            + $this->nonTradingLossIntangibles + $this->tradingLosses
+            + $this->tradingLossesCarriedForward + $this->nonTradeCapitalAllowances;
         $profitsBeforeDonationsAndGroupRelief = max(0.0, $profitsBeforeOtherDeductions - $deductionsTotal);
-        $chargeableProfits = max(0.0, $profitsBeforeDonationsAndGroupRelief - $this->qualifyingDonations - ($this->groupRelief ?? 0) - ($this->groupReliefForCarriedForwardLosses ?? 0));
+        $chargeableProfits = max(0.0,
+            $profitsBeforeDonationsAndGroupRelief
+            - $this->qualifyingDonations
+            - ($this->groupRelief ?? 0)
+            - ($this->groupReliefForCarriedForwardLosses ?? 0)
+        );
         $augmentedProfits = $chargeableProfits + $this->frankedInvestmentIncome;
 
         [$financialYears, $corporationTax, $marginalRelief] = $this->computeTaxBreakdown($chargeableProfits, $augmentedProfits);
 
-        // Ensure marginal relief is valid
-        if ($this->ringFenceProfitsIncluded == 0 && strtotime($this->periodTo) > strtotime('2023-03-31')) {
-            $marginalRelief = 0;
-        }
+        // FIX: removed the old wrong guard that zero'd out marginal relief for every
+        // post-April 2023 non-ring-fence return. calculateMarginalRelief() now correctly
+        // implements s18-21 CTA 2010 (the new tiered / marginal-relief system) for all
+        // periods ending on or after 1 April 2023, consistent with applyMarginalRelief()
+        // in the Livewire computation-preview component.
+
         if ($marginalRelief >= $corporationTax) {
-            $marginalRelief = max(0, $corporationTax - 0.01);
+            $marginalRelief = max(0.0, $corporationTax - 0.01);
         }
 
         $netCorporationTaxChargeable = max(0.0, $corporationTax - $marginalRelief);
         $totalReliefsAndDeductions = $this->doubleTaxationRelief + $this->advancedCorporationTax;
         $netCorporationTaxLiability = max(0.0, $netCorporationTaxChargeable - $totalReliefsAndDeductions);
-        $cfcAndBankLevyTotal = $this->cfcTaxPayable + $this->bankLevyPayable + $this->bankSurchargePayable + $this->rpdtPayable;
+        $cfcAndBankLevyTotal = $this->cfcTaxPayable + $this->bankLevyPayable
+            + $this->bankSurchargePayable + $this->rpdtPayable;
 
         $deductedIncomeTax = $this->deductedIncomeTax;
 
-        // Calculate tax chargeable, repayable, and payable based on HMRC business rules
         if ($netCorporationTaxLiability > 0) {
-            // Box 475 IS completed - use Error 9339, 9345, 9347 rules
-            $taxChargeable = $netCorporationTaxLiability + $this->loansToParticipators + $cfcAndBankLevyTotal;
-            $taxRepayable = $deductedIncomeTax - $taxChargeable;
-            $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
-
-            // Handle schema constraint: TaxRepayable must be >= 0
+            $taxChargeable  = $netCorporationTaxLiability + $this->loansToParticipators + $cfcAndBankLevyTotal;
+            $taxRepayable   = $deductedIncomeTax - $taxChargeable;
+            $taxPayable     = max(0.0, $taxChargeable - $deductedIncomeTax);
             if ($taxRepayable < 0) {
                 $deductedIncomeTax = $taxChargeable;
-                $taxRepayable = 0.0;
-                $taxPayable = 0.0;
+                $taxRepayable      = 0.0;
+                $taxPayable        = 0.0;
             }
         } else {
-            // Box 475 is NOT completed - use Error 9344, 9346, 9348 rules
-            $taxChargeable = ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal) - $totalReliefsAndDeductions;
+            $taxChargeable = ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal)
+                - $totalReliefsAndDeductions;
             $taxChargeable = max(0.0, $taxChargeable);
 
             if ($taxChargeable > 0) {
                 $taxRepayable = max(0.0, $deductedIncomeTax - $taxChargeable);
-                $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
+                $taxPayable   = max(0.0, $taxChargeable - $deductedIncomeTax);
             } else {
-                $taxRepayable = max(0.0, $deductedIncomeTax + $totalReliefsAndDeductions - ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal));
+                $taxRepayable = max(0.0,
+                    $deductedIncomeTax + $totalReliefsAndDeductions
+                    - ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal)
+                );
                 $taxPayable = 0.0;
             }
         }
 
-        // Update class properties with calculated values
-        $this->taxChargeable = $taxChargeable;
-        $this->taxRepayable = $taxRepayable;
-        $this->taxPayable = $taxPayable;
+        $this->taxChargeable     = $taxChargeable;
+        $this->taxRepayable      = $taxRepayable;
+        $this->taxPayable        = $taxPayable;
         $this->deductedIncomeTax = $deductedIncomeTax;
 
-        // Calculate CJRS overpayments now due (Box 526) per HMRC rule 9384
-        // Box 526 = (CJRSreceived + JobRetentionBonusOverpayment) - (CJRSdue + CJRSoverpaymentAlreadyAssessed)
+        // CJRS overpayments now due (Box 526, per HMRC rule 9384)
         if (
             $this->cjrsReceived !== null || $this->cjrsDue !== null ||
             $this->cjrsOverpaymentAlreadyAssessed !== null || $this->jobRetentionBonusOverpayment !== null
@@ -2257,14 +2183,12 @@ class CT600 extends GovTalk
             $this->cjrsOverpaymentsNowDue = round($cjrsPositive - $cjrsNegative, 2);
         }
 
-        // Store calculated values for reference
         $this->profitsBeforeDonationsAndGroupRelief = $profitsBeforeDonationsAndGroupRelief;
-        $this->corporationTax = $corporationTax;
-        $this->netCorporationTaxLiability = $netCorporationTaxLiability;
+        $this->corporationTax                       = $corporationTax;
+        $this->netCorporationTaxLiability           = $netCorporationTaxLiability;
     }
-    
 
-   
+
     private function buildBody(): string
     {
         $xw = new XMLWriter();
@@ -2274,7 +2198,6 @@ class CT600 extends GovTalk
         $xw->writeAttribute('xmlns', self::NS);
         $xw->startElement('IRheader');
 
-        // HMRC sample shows only UTR is required in IRheader Keys for CT600
         $xw->startElement('Keys');
         if ($this->employer->getCorporationTaxReference()) {
             $xw->startElement('Key');
@@ -2291,20 +2214,16 @@ class CT600 extends GovTalk
             $xw->endElement();
         }
 
-        // Contact details
         if ($this->contactDetails !== null && $this->contactDetails->hasData()) {
             $this->contactDetails->writeContactDetails($xw);
         }
 
-        // Agent information
         if ($this->agentDetails !== null && $this->agentDetails->hasData()) {
             $this->agentDetails->writeAgent($xw);
         }
 
-
         $xw->writeElement('DefaultCurrency', 'GBP');
 
-        // Manifest element as per HMRC sample
         $xw->startElement('Manifest');
         $xw->startElement('Contains');
         $xw->startElement('Reference');
@@ -2321,24 +2240,6 @@ class CT600 extends GovTalk
         $xw->endElement();
         $xw->writeElement('Sender', $this->senderType);
         $xw->endElement(); // IRheader
-
-
-        // $xw->writeElement('DefaultCurrency', 'GBP');
-        // $xw->startElement('Manifest');
-        // $xw->startElement('Contains');
-        // $xw->startElement('Reference');
-        // $xw->writeElement('Namespace', self::NS);
-        // $xw->writeElement('SchemaVersion', '2014-v1.993');
-        // $xw->writeElement('TopElementName', 'CompanyTaxReturn');
-        // $xw->endElement(); // Reference
-        // $xw->endElement(); // Contains
-        // $xw->endElement(); // Manifest
-        // $xw->startElement('IRmark');
-        // $xw->writeAttribute('Type', 'generic');
-        // $xw->text('IRmark+Token');
-        // $xw->endElement();
-        // $xw->writeElement('Sender', 'Company');
-        // $xw->endElement(); // IRheader
 
         $xw->startElement('CompanyTaxReturn');
         $xw->writeAttribute('ReturnType', $this->returnType);
@@ -2419,91 +2320,91 @@ class CT600 extends GovTalk
         if ($this->otherFinancialConcerns !== null) $xw->writeElement('OtherFinancialConcerns', $this->otherFinancialConcerns);
         $xw->endElement(); // Turnover
 
-        // Calculations to avoid validation errors
+        // -----------------------------------------------------------------------
+        // Core tax calculations (mirroring calculateTaxValues() output)
+        // -----------------------------------------------------------------------
         $tradingNetProfits = max(0.0, $this->tradingProfits - $this->lossesBroughtForward);
-        $incomeSum = $tradingNetProfits + $this->nonTradingLoanProfitsAndGains + $this->nonLoanAnnuitiesAnnualPaymentsDiscounts + $this->nonUKdividends - $this->deductedIncome + $this->propertyBusinessIncome + $this->nonTradingGainsIntangibles + $this->tonnageTaxProfits + $this->otherIncome;
+        $incomeSum = $tradingNetProfits + $this->nonTradingLoanProfitsAndGains
+            + $this->nonLoanAnnuitiesAnnualPaymentsDiscounts + $this->nonUKdividends
+            - $this->deductedIncome + $this->propertyBusinessIncome
+            + $this->nonTradingGainsIntangibles + $this->tonnageTaxProfits + $this->otherIncome;
         $netChargeableGains = max(0.0, $this->grossGains - $this->allowableLosses);
-        $profitsBeforeOtherDeductions = $incomeSum + $netChargeableGains - $this->lossesBroughtForwardOverall - $this->nonTradeDeficitsOnLoans;
-        $deductionsTotal = $this->unquotedShares + $this->managementExpenses + $this->ukPropertyBusinessLosses + $this->capitalAllowances + $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits + $this->nonTradingLossIntangibles + $this->tradingLosses + $this->tradingLossesCarriedForward + $this->nonTradeCapitalAllowances;
+        $profitsBeforeOtherDeductions = $incomeSum + $netChargeableGains
+            - $this->lossesBroughtForwardOverall - $this->nonTradeDeficitsOnLoans;
+        $deductionsTotal = $this->unquotedShares + $this->managementExpenses
+            + $this->ukPropertyBusinessLosses + $this->capitalAllowances
+            + $this->nonTradeDeficits + $this->carriedForwardNonTradeDeficits
+            + $this->nonTradingLossIntangibles + $this->tradingLosses
+            + $this->tradingLossesCarriedForward + $this->nonTradeCapitalAllowances;
         $profitsBeforeDonationsAndGroupRelief = max(0.0, $profitsBeforeOtherDeductions - $deductionsTotal);
-        $chargeableProfits = max(0.0, $profitsBeforeDonationsAndGroupRelief - $this->qualifyingDonations - ($this->groupRelief ?? 0) - ($this->groupReliefForCarriedForwardLosses ?? 0));
+        $chargeableProfits = max(0.0,
+            $profitsBeforeDonationsAndGroupRelief
+            - $this->qualifyingDonations
+            - ($this->groupRelief ?? 0)
+            - ($this->groupReliefForCarriedForwardLosses ?? 0)
+        );
         $augmentedProfits = $chargeableProfits + $this->frankedInvestmentIncome;
 
         [$financialYears, $corporationTax, $marginalRelief] = $this->computeTaxBreakdown($chargeableProfits, $augmentedProfits);
-        // Ensure marginal relief is valid
-        if ($this->ringFenceProfitsIncluded == 0 && strtotime($this->periodTo) > strtotime('2023-03-31')) {
-            $marginalRelief = 0;
-        }
+
+        // FIX: removed the old wrong guard that zero'd out marginal relief for every
+        // post-April 2023 non-ring-fence return.  The guard was:
+        //   if ($this->ringFenceProfitsIncluded == 0 && $periodTo > '2023-03-31') { $marginalRelief = 0; }
+        // That silently suppressed MR for every modern company. calculateMarginalRelief()
+        // now correctly implements s18-21 CTA 2010 for all such periods.
+
         if ($marginalRelief >= $corporationTax) {
-            $marginalRelief = max(0, $corporationTax - 0.01);
+            $marginalRelief = max(0.0, $corporationTax - 0.01);
         }
+
         $netCorporationTaxChargeable = max(0.0, $corporationTax - $marginalRelief);
-        $totalReliefsAndDeductions = $this->doubleTaxationRelief + $this->advancedCorporationTax;
-        $netCorporationTaxLiability = max(0.0, $netCorporationTaxChargeable - $totalReliefsAndDeductions);
-        $cfcAndBankLevyTotal = $this->cfcTaxPayable + $this->bankLevyPayable + $this->bankSurchargePayable + $this->rpdtPayable;
+        $totalReliefsAndDeductions   = $this->doubleTaxationRelief + $this->advancedCorporationTax;
+        $netCorporationTaxLiability  = max(0.0, $netCorporationTaxChargeable - $totalReliefsAndDeductions);
+        $cfcAndBankLevyTotal = $this->cfcTaxPayable + $this->bankLevyPayable
+            + $this->bankSurchargePayable + $this->rpdtPayable;
 
         $deductedIncomeTax = $this->deductedIncomeTax;
 
-        // HMRC Business Rules implementation based on CT validation rules:
-        // Box 440 = CorporationTax, Box 470 = TotalReliefsAndDeductions, Box 475 = NetCorporationTaxLiability
-        // Box 480 = LoansToParticipators, Box 500-505 = CFC/Bank levies, Box 510 = TaxChargeable
-        // Box 515 = DeductedIncomeTax, Box 520 = TaxRepayable, Box 525 = TaxPayable
-
         if ($netCorporationTaxLiability > 0) {
-            // Box 475 IS completed - use Error 9339, 9345, 9347 rules
-            // Error 9339: Box 510 = Box 475 + Box 480 + Box 500 + Box 501 + Box 502 + Box 505
             $taxChargeable = $netCorporationTaxLiability + $this->loansToParticipators + $cfcAndBankLevyTotal;
-
-            // Error 9345: Box 520 = Box 515 - Box 510 (exact equality required)
-            $taxRepayable = $deductedIncomeTax - $taxChargeable;
-
-            // Error 9347: Box 525 = max(0, Box 510 - Box 515)
-            $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
-
-            // Handle schema constraint: TaxRepayable must be >= 0
+            $taxRepayable  = $deductedIncomeTax - $taxChargeable;
+            $taxPayable    = max(0.0, $taxChargeable - $deductedIncomeTax);
             if ($taxRepayable < 0) {
-                // Adjust DeductedIncomeTax to satisfy all constraints
                 $deductedIncomeTax = $taxChargeable;
-                $taxRepayable = 0.0;
-                $taxPayable = 0.0;
+                $taxRepayable      = 0.0;
+                $taxPayable        = 0.0;
             }
         } else {
-            // Box 475 is NOT completed - use Error 9344, 9346, 9348 rules
-            // Error 9344: Box 510 = (Box 440 + Box 480 + Box 500 + Box 501 + Box 502 + Box 505) - Box 470
-            $taxChargeable = ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal) - $totalReliefsAndDeductions;
-            $taxChargeable = max(0.0, $taxChargeable); // Cannot be negative
+            $taxChargeable = ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal)
+                - $totalReliefsAndDeductions;
+            $taxChargeable = max(0.0, $taxChargeable);
 
             if ($taxChargeable > 0) {
-                // Error 9345: Box 520 = Box 515 - Box 510 (when Box 510 is completed)
                 $taxRepayable = max(0.0, $deductedIncomeTax - $taxChargeable);
-                // Error 9347: Box 525 = max(0, Box 510 - Box 515)
-                $taxPayable = max(0.0, $taxChargeable - $deductedIncomeTax);
+                $taxPayable   = max(0.0, $taxChargeable - $deductedIncomeTax);
             } else {
-                // Box 510 is not completed - use Error 9346 rule
-                // Error 9346: Box 520 = Box 515 + Box 470 - (Box 440 + Box 480 + Box 500 + Box 505)
-                $taxRepayable = max(0.0, $deductedIncomeTax + $totalReliefsAndDeductions - ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal));
+                $taxRepayable = max(0.0,
+                    $deductedIncomeTax + $totalReliefsAndDeductions
+                    - ($corporationTax + $this->loansToParticipators + $cfcAndBankLevyTotal)
+                );
                 $taxPayable = 0.0;
             }
         }
         $taxPayableIncludingRestitutionTax = $taxPayable + $this->cjrsOverpaymentsNowDue + $this->restitutionTax;
         $effectiveRate = $chargeableProfits > 0 ? $netCorporationTaxLiability / $chargeableProfits : 0;
         $niCorporationTaxIncluded = $this->thisPeriod === 'yes' ? $this->northernIrelandProfitsIncluded * $effectiveRate : 0;
-        $researchAndDevelopmentVaccineOrCreativeTaxCredit = $this->creativeCredit + $this->avecAndVgec; // Excluded vaccineCredit
+        $researchAndDevelopmentVaccineOrCreativeTaxCredit = $this->creativeCredit + $this->avecAndVgec;
         $landOrLifeCredit = $this->landRemediationCredit + $this->lifeAssuranceCompanyCredit;
 
-        // HMRC Rule 9276: TaxOutstanding = TaxPayable - (ResearchAndDevelopmentVaccineOrCreativeTaxCredit + LandOrLifeCredit + CapitalAllowancesFirstYearCredit + TaxAlreadyPaid)
-        // If result is negative, TaxOutstanding must not be completed (set to 0)
-        $netDue = $taxPayable - $researchAndDevelopmentVaccineOrCreativeTaxCredit - $landOrLifeCredit - $this->capitalAllowancesFirstYearCredit - $this->taxAlreadyPaid;
+        $netDue      = $taxPayable - $researchAndDevelopmentVaccineOrCreativeTaxCredit
+            - $landOrLifeCredit - $this->capitalAllowancesFirstYearCredit - $this->taxAlreadyPaid;
         $taxOutstanding = $netDue > 0 ? $netDue : 0.0;
-        $taxOverpaid = $netDue < 0 ? abs($netDue) : 0.0;
+        $taxOverpaid    = $netDue < 0 ? abs($netDue) : 0.0;
 
         $xw->startElement('CompanyTaxCalculation');
         $xw->startElement('Income');
         $xw->startElement('Trading');
         $xw->writeElement('Profits', $this->wholeMoney($this->tradingProfits));
-        // HMRC Rule 9150: If Box 160 (LossesBroughtForward in Trading) is completed then
-        // Box 155 (Profits) must be greater than 0. To comply, only emit LossesBroughtForward
-        // when there are actual trading profits and a positive brought-forward loss to set off.
         if ($this->tradingProfits > 0.0 && $this->lossesBroughtForward > 0.0) {
             $xw->writeElement('LossesBroughtForward', $this->money($this->lossesBroughtForward));
         }
@@ -2516,7 +2417,6 @@ class CT600 extends GovTalk
         $xw->writeElement('DeductedIncome', $this->money($this->deductedIncome));
         $xw->writeElement('PropertyBusinessIncome', $this->money($this->propertyBusinessIncome));
         $xw->writeElement('NonTradingGainsIntangibles', $this->money($this->nonTradingGainsIntangibles));
-        // Only include TonnageTaxProfits if it has a value > 0 or if it's required (Box 120 completed)
         if ($this->tonnageTaxProfits > 0) {
             $xw->writeElement('TonnageTaxProfits', $this->money($this->tonnageTaxProfits));
         }
@@ -2524,7 +2424,6 @@ class CT600 extends GovTalk
         $xw->endElement(); // Income
         $xw->startElement('ChargeableGains');
         $xw->writeElement('GrossGains', $this->money($this->grossGains));
-        // Only include AllowableLosses if GrossGains > 0 (HMRC rule 9158)
         if ($this->grossGains > 0) {
             $xw->writeElement('AllowableLosses', $this->money($this->allowableLosses));
         }
@@ -2552,7 +2451,6 @@ class CT600 extends GovTalk
         $xw->startElement('ChargesAndReliefs');
         $xw->writeElement('ProfitsBeforeDonationsAndGroupRelief', $this->wholeMoney($profitsBeforeDonationsAndGroupRelief));
         $xw->writeElement('QualifyingDonations', $this->money($this->qualifyingDonations));
-        // Only include Group Relief if there are actual group companies (Box 105 completed) or return type is Amended
         if (($this->groupRelief ?? 0) > 0 || $this->returnType === 1) {
             $xw->writeElement('GroupRelief', $this->money($this->groupRelief ?? 0.00));
         }
@@ -2561,7 +2459,6 @@ class CT600 extends GovTalk
         }
         $xw->endElement();
         $xw->writeElement('ChargeableProfits', $this->money($chargeableProfits));
-        // Only include RingFenceProfitsIncluded if there are actual ring fence profits (Box 135) or return type is Amended
         if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
             $xw->writeElement('RingFenceProfitsIncluded', $this->money($this->ringFenceProfitsIncluded));
         }
@@ -2572,15 +2469,6 @@ class CT600 extends GovTalk
         if ($this->associatedCompanies !== null) {
             $xw->startElement('AssociatedCompanies');
             $xw->writeElement('ThisPeriod', (string) $this->associatedCompanies);
-            // HMRC Rule 9397: Boxes 327 and 328 must NOT be completed if Box 326 is completed
-            // Since ThisPeriod (Box 326) is set, we must NOT include AssociatedCompaniesFinancialYears
-            // if ($this->associatedCompaniesFinancialYears !== null) {
-            //     $xw->startElement('AssociatedCompaniesFinancialYears');
-            //     $xw->writeElement('FirstYear', (string) ($this->associatedCompaniesFinancialYears['firstYear'] ?? 0));
-            //     $xw->writeElement('SecondYear', (string) ($this->associatedCompaniesFinancialYears['secondYear'] ?? 0));
-            //     $xw->endElement();
-            // }
-            // Only include StartingOrSmallCompaniesRate when true (schema only allows 'yes')
             if ($this->startingOrSmallCompaniesRate) {
                 $xw->writeElement('StartingOrSmallCompaniesRate', 'yes');
             }
@@ -2596,7 +2484,6 @@ class CT600 extends GovTalk
                 $xw->startElement('Details');
                 $xw->writeElement('Profit', $this->wholeMoney($detail['profit']));
                 $xw->writeElement('TaxRate', $this->money($detail['rate']));
-                // Ensure Tax (Box 395) exactly equals Profit (Box 385) multiplied by Rate (Box 390)
                 $tax = $this->wholeMoney($detail['profit']) * ($this->wholeMoney($detail['rate']) / 100);
                 $xw->writeElement('Tax', $this->money($tax));
                 $xw->endElement();
@@ -2605,9 +2492,30 @@ class CT600 extends GovTalk
         }
         $xw->endElement(); // CorporationTaxChargeable
         $xw->writeElement('CorporationTax', $this->money($corporationTax));
-        if ($this->ringFenceProfitsIncluded > 0 || strtotime($this->periodTo) <= strtotime('2023-03-31')) {
+
+        // -----------------------------------------------------------------------
+        // FIX: Marginal-relief XML element — three cases:
+        //
+        //  (a) Period entirely pre-April 2023, OR ring-fence profits present:
+        //      write <MarginalReliefForRingFenceTrades> (old schema element).
+        //
+        //  (b) Period on/after April 2023, no ring-fence (new s18-21 CTA 2010 system):
+        //      write <MarginalRelief> only when relief is non-zero.
+        //
+        // Previously the code used a single wrong condition that suppressed marginal
+        // relief for all post-2023 non-ring-fence returns and never wrote <MarginalRelief>.
+        // -----------------------------------------------------------------------
+        $isPreApril2023Period = strtotime($this->periodTo) <= strtotime('2023-03-31');
+        $hasRingFence         = $this->ringFenceProfitsIncluded > 0;
+
+        if ($hasRingFence || $isPreApril2023Period) {
+            // Pre-2023 / ring-fence marginal relief
             $xw->writeElement('MarginalReliefForRingFenceTrades', $this->money($marginalRelief));
+        } elseif ($marginalRelief > 0) {
+            // Post-April 2023 new marginal relief (s18-21 CTA 2010)
+            $xw->writeElement('MarginalRelief', $this->money($marginalRelief));
         }
+
         $xw->writeElement('NetCorporationTaxChargeable', $this->money($netCorporationTaxChargeable));
         $xw->startElement('TaxReliefsAndDeductions');
         $xw->writeElement('CommunityInvestmentRelief', $this->money($this->communityInvestmentRelief ?? 0.0));
@@ -2638,11 +2546,10 @@ class CT600 extends GovTalk
 
         $xw->startElement('CalculationOfTaxOutstandingOrOverpaid');
         $xw->writeElement('NetCorporationTaxLiability', $this->money($netCorporationTaxLiability));
-        if ($this->loansToParticipators > 0) { // Only include if non-zero
+        if ($this->loansToParticipators > 0) {
             $xw->writeElement('LoansToParticipators', $this->money($this->loansToParticipators));
         }
         if ($this->ct600aReliefDue !== null) $xw->writeElement('CT600AreliefDue', $this->ct600aReliefDue);
-        // Only include CFC tax payable if there are CFC companies (Box 100 completed) or return type is Amended
         if ($this->cfcTaxPayable > 0 || $this->returnType === 1) {
             $xw->writeElement('CFCtaxPayable', $this->money($this->cfcTaxPayable));
         }
@@ -2652,7 +2559,6 @@ class CT600 extends GovTalk
         $xw->writeElement('CFCandBankLevyTotal', $this->money($cfcAndBankLevyTotal));
         $xw->writeElement('EOGPLpayable', $this->money($this->eogplPayable));
         $xw->writeElement('EGLpayable', $this->money($this->eglPayable));
-        // Only include SupplementaryCharge if there are ring fence profits (Box 135) or return type is Amended
         if ($this->supplementaryCharge > 0 || $this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
             $xw->writeElement('SupplementaryCharge', $this->money($this->supplementaryCharge));
         }
@@ -2687,14 +2593,12 @@ class CT600 extends GovTalk
             $xw->writeElement('LifeAssuranceCompanyCredit', $this->money($this->lifeAssuranceCompanyCredit));
         }
         $xw->writeElement('LandOrLifeCredit', $this->money($landOrLifeCredit));
-        // Only include Ring Fence elements if there are ring fence profits (Box 135) or return type is Amended
         if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
             $xw->writeElement('RingFenceCorpTaxIncluded', $this->money($this->ringFenceCorpTaxIncluded));
         }
         if ($this->thisPeriod === 'yes') {
             $xw->writeElement('NIcorporationTaxIncluded', $this->money($niCorporationTaxIncluded));
         }
-        // Only include Ring Fence Supplementary Charge if there are ring fence profits (Box 135) or return type is Amended
         if ($this->ringFenceProfitsIncluded > 0 || $this->returnType === 1) {
             $xw->writeElement('RingFenceSupplementaryChargeIncluded', $this->money($this->ringFenceSupplementaryChargeIncluded));
         }
@@ -2845,21 +2749,16 @@ class CT600 extends GovTalk
         if ($this->paymentToPerson !== null) {
             $xw->startElement('PaymentToPerson');
             $xw->writeElement('Recipient', $this->paymentToPerson['recipient']);
-
-            // Address structure
             $xw->startElement('Address');
-            // Line elements (2-3 required)
             foreach ($this->paymentToPerson['address']['lines'] as $line) {
                 if (!empty($line)) {
                     $xw->writeElement('Line', $line);
                 }
             }
-            // Optional PostCode
             if (!empty($this->paymentToPerson['address']['postCode'])) {
                 $xw->writeElement('PostCode', $this->paymentToPerson['address']['postCode']);
             }
             $xw->endElement(); // Address
-
             $xw->writeElement('NomineeReference', $this->paymentToPerson['nomineeReference']);
             $xw->endElement(); // PaymentToPerson
         }
@@ -2875,42 +2774,29 @@ class CT600 extends GovTalk
             $xw->writeRaw($fragment);
         }
 
-        // Add CT600E Charity supplementary form if present
         if ($this->ct600ePresent) {
             $this->addCT600ESupplementaryForm($xw);
         }
 
-        // Write attachments if any exist
         if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments) || !empty($this->pdfAttachments) || !empty($this->additionalPdf)) {
             $xw->startElement('AttachedFiles');
 
-            // Schema choice: EITHER multiple Attachments (PDFs) OR XBRLsubmission + optional Attachments
-
-            // If we have iXBRL attachments, use XBRLsubmission structure
             if (!empty($this->accountsIxbrlAttachments) || !empty($this->computationsIxbrlAttachments)) {
-                // Schema requires ONE XBRLsubmission element containing EITHER:
-                // - Just Accounts alone
-                // - OR Computation followed by optional Accounts (sequence)
                 $xw->startElement('XBRLsubmission');
 
-                // If we have computations, write them first (required when both exist)
                 if (!empty($this->computationsIxbrlAttachments)) {
                     foreach ($this->computationsIxbrlAttachments as $attachment) {
                         if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
                             $xw->startElement('Computation');
                             $xw->startElement('Instance');
                             $xw->startElement('EncodedInlineXBRLDocument');
-
                             if (isset($attachment['filename'])) {
                                 $xw->writeAttribute('Filename', $attachment['filename']);
                             }
                             if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
                                 $xw->writeAttribute('entryPoint', 'yes');
                             }
-
-                            // Write the iXBRL content as base64
                             $xw->text(base64_encode($attachment['content']));
-
                             $xw->endElement(); // EncodedInlineXBRLDocument
                             $xw->endElement(); // Instance
                             $xw->endElement(); // Computation
@@ -2918,24 +2804,19 @@ class CT600 extends GovTalk
                     }
                 }
 
-                // Then write accounts (can be alone or after computation)
                 if (!empty($this->accountsIxbrlAttachments)) {
                     foreach ($this->accountsIxbrlAttachments as $attachment) {
                         if (isset($attachment['mode']) && $attachment['mode'] === 'encoded') {
                             $xw->startElement('Accounts');
                             $xw->startElement('Instance');
                             $xw->startElement('EncodedInlineXBRLDocument');
-
                             if (isset($attachment['filename'])) {
                                 $xw->writeAttribute('Filename', $attachment['filename']);
                             }
                             if (isset($attachment['entryPoint']) && $attachment['entryPoint']) {
                                 $xw->writeAttribute('entryPoint', 'yes');
                             }
-
-                            // Write the iXBRL content as base64
                             $xw->text(base64_encode($attachment['content']));
-
                             $xw->endElement(); // EncodedInlineXBRLDocument
                             $xw->endElement(); // Instance
                             $xw->endElement(); // Accounts
@@ -2946,47 +2827,30 @@ class CT600 extends GovTalk
                 $xw->endElement(); // XBRLsubmission
             }
 
-            // Write PDF attachments (can be standalone or after XBRLsubmission)
-            // Used when NoAccountsReason is "Other - PDF attached with explanation"
             if (!empty($this->pdfAttachments)) {
                 foreach ($this->pdfAttachments as $attachment) {
                     $xw->startElement('Attachment');
-
-                    // Required attributes
                     $xw->writeAttribute('Filename', $attachment['filename']);
-                    $xw->writeAttribute('Format', $attachment['format']); // 'pdf' or 'esef'
-                    $xw->writeAttribute('Type', $attachment['type']); // 'accounts', 'computations', 'other', etc.
-
-                    // Optional attributes
+                    $xw->writeAttribute('Format', $attachment['format']);
+                    $xw->writeAttribute('Type', $attachment['type']);
                     if (!empty($attachment['description'])) {
                         $xw->writeAttribute('Description', $attachment['description']);
                     }
                     if (isset($attachment['size'])) {
                         $xw->writeAttribute('Size', $attachment['size']);
                     }
-
-                    // Write the base64 encoded content directly (simple type with base64Binary)
                     $xw->text($attachment['content']);
-
                     $xw->endElement(); // Attachment
                 }
             }
 
-            // Write additional pdf documents as Attachment elements with format='esef' and type='other'
             if (!empty($this->additionalPdf)) {
                 foreach ($this->additionalPdf as $attachment) {
                     $xw->startElement('Attachment');
-
-                    // Required attributes
                     $xw->writeAttribute('Filename', $attachment['filename']);
                     $xw->writeAttribute('Format', 'pdf');
                     $xw->writeAttribute('Type', 'other');
-
-                    // Optional attributes - can add description if needed
-
-                    // Write the base64 encoded iXBRL content
                     $xw->text(base64_encode($attachment['content']));
-
                     $xw->endElement(); // Attachment
                 }
             }
@@ -2995,7 +2859,6 @@ class CT600 extends GovTalk
         }
 
         $xw->endElement(); // CompanyTaxReturn
-
         $xw->endElement(); // IRenvelope
 
         return $xw->outputMemory(true);
@@ -3008,44 +2871,34 @@ class CT600 extends GovTalk
     {
         $xw->startElement('Charity');
 
-        // ClaimExemption element must come first per HMRC schema - always required
         $xw->startElement('ClaimExemption');
 
-        // Add required child elements for ClaimExemption
         if (!empty($this->ct600eData['charity_registration_number'])) {
             $xw->writeElement('RegistrationNumber', $this->ct600eData['charity_registration_number']);
         }
 
-        // Status reflects CT600E charity exemption claim (E15, E20, E25)
         $exemptionClaimed = $this->ct600eData['charity_exemption_claimed'] ?? false;
         $xw->startElement('Status');
 
-        // E15: ClaimingExemptionAllOrPart - only if charity is claiming any exemption
         if ($exemptionClaimed) {
             $xw->writeElement('ClaimingExemptionAllOrPart', 'yes');
         }
 
-        // AllCharitable section - choice between E20 (AllExempt) or E25 (SomeNotOnlyCharitable)
         $xw->startElement('AllCharitable');
         if ($exemptionClaimed) {
-            // E20: All income and gains are exempt from tax
             $xw->writeElement('AllExempt', 'yes');
         } else {
-            // E25: Some income/gains may not be exempt (completed main CT600)
             $xw->writeElement('SomeNotOnlyCharitable', 'yes');
         }
         $xw->endElement(); // AllCharitable
 
         $xw->endElement(); // Status
-
         $xw->endElement(); // ClaimExemption
 
-        // Charity identification details
         if (!empty($this->ct600eData['charity_type'])) {
             $xw->writeElement('CharityType', $this->ct600eData['charity_type']);
         }
 
-        // Charitable donations breakdown
         $xw->startElement('QualifyingCharitableDonations');
         $xw->writeElement('UKCharities', $this->money($this->ct600eData['uk_charities'] ?? 0.0));
         $xw->writeElement('UKCommunityAmateurSportsClubs', $this->money($this->ct600eData['uk_community_amateur'] ?? 0.0));
@@ -3053,7 +2906,6 @@ class CT600 extends GovTalk
         $xw->writeElement('TotalQualifyingDonationsPaid', $this->money(($this->ct600eData['uk_charities'] ?? 0.0) + ($this->ct600eData['uk_community_amateur'] ?? 0.0)));
         $xw->endElement(); // QualifyingCharitableDonations
 
-        // Group relief details
         if (($this->ct600eData['maximum_available_group_relief'] ?? 0.0) > 0 || ($this->ct600eData['group_relief_surrendered'] ?? 0.0) > 0) {
             $xw->startElement('GroupRelief');
             $xw->writeElement('MaximumAvailableForGroupRelief', $this->money($this->ct600eData['maximum_available_group_relief'] ?? 0.0));
@@ -3061,7 +2913,6 @@ class CT600 extends GovTalk
             $xw->endElement(); // GroupRelief
         }
 
-        // Additional charity-specific reliefs and exemptions
         if (($this->ct600eData['gift_aid_claimed'] ?? 0.0) > 0) {
             $xw->writeElement('GiftAidClaimed', $this->money($this->ct600eData['gift_aid_claimed']));
         }
@@ -3070,7 +2921,6 @@ class CT600 extends GovTalk
             $xw->writeElement('CommunityInvestmentTaxRelief', $this->money($this->ct600eData['community_investment_tax_relief']));
         }
 
-        // Trade donations from accounts
         if (($this->ct600eData['trade_donations'] ?? 0.0) > 0) {
             $xw->writeElement('TradeDonations', $this->money($this->ct600eData['trade_donations']));
         }
@@ -3080,7 +2930,6 @@ class CT600 extends GovTalk
 
     private function preciseMoney(float $v): string
     {
-        // Ensure exactly 2 decimal places with proper rounding
         return number_format(round($v, 2), 2, '.', '');
     }
 
@@ -3096,32 +2945,27 @@ class CT600 extends GovTalk
 
     private function computeTaxBreakdown(float $taxable, float $augmented): array
     {
-        $allocated = $this->allocateProfitsAcrossFinancialYears($taxable);
+        $allocated    = $this->allocateProfitsAcrossFinancialYears($taxable);
         $augAllocated = $this->allocateProfitsAcrossFinancialYears($augmented);
         $financialYears = [];
         $grossTax = 0.0;
-        $fyIndex = 0;
+        $fyIndex  = 0;
 
         foreach ($allocated as $year => $profit) {
             $fyIndex++;
             $rate = $this->financialYearRates[$year] ?? 25.0;
 
-            // Fix for Error 9214: Profit must be rounded to WHOLE NUMBER to match XML output
-            // buildBody() uses wholeMoney() which rounds to 0 decimal places
-            // This ensures CorporationTax (Box 430) = sum of FY taxes (Boxes 395, 410, etc.)
             $roundedProfit = round($profit, 0);
-            // Calculate tax using same formula as buildBody(): wholeMoney(profit) * (money(rate) / 100)
-            $tax = $roundedProfit * ($rate / 100);
-            // Round tax to 2 decimal places for display
-            $displayTax = round($tax, 2);
+            $tax           = $roundedProfit * ($rate / 100);
+            $displayTax    = round($tax, 2);
 
             $financialYears[] = [
-                'year' => $year,
+                'year'    => $year,
                 'details' => [[
                     'profit' => $roundedProfit,
-                    'rate' => $rate,
-                    'tax' => $displayTax
-                ]]
+                    'rate'   => $rate,
+                    'tax'    => $displayTax,
+                ]],
             ];
             $grossTax += $displayTax;
         }
@@ -3129,66 +2973,134 @@ class CT600 extends GovTalk
         $marginalRelief = $this->calculateMarginalRelief($taxable, $augmented, $grossTax, $augAllocated);
         return [$financialYears, round($grossTax, 2), $marginalRelief];
     }
+
     private function allocateProfitsAcrossFinancialYears(float $amount): array
     {
-        $from = new \DateTimeImmutable($this->periodFrom);
-        $to = new \DateTimeImmutable($this->periodTo);
+        $from      = new \DateTimeImmutable($this->periodFrom);
+        $to        = new \DateTimeImmutable($this->periodTo);
         $totalDays = $to->diff($from)->days + 1;
-        $fyStartYear = $from->format('m-d') < '04-01' ? $from->format('Y') - 1 : $from->format('Y');
+
+        $fyStartYear = $from->format('m-d') < '04-01'
+            ? (int) $from->format('Y') - 1
+            : (int) $from->format('Y');
+
         $fy1Start = new \DateTimeImmutable("$fyStartYear-04-01");
         $fy2Start = $fy1Start->modify('+1 year');
+
         if ($to < $fy2Start) {
-            return [(int)$fy1Start->format('Y') => $amount];
+            return [(int) $fy1Start->format('Y') => $amount];
         }
-        $fy1Days = min($totalDays, $fy2Start->modify('-1 day')->diff($from)->days + 1);
+
+        $fy1Days   = min($totalDays, $fy2Start->modify('-1 day')->diff($from)->days + 1);
         $fy1Amount = $amount * ($fy1Days / $totalDays);
         $fy2Amount = $amount - $fy1Amount;
-        return [(int)$fy1Start->format('Y') => $fy1Amount, (int)$fy2Start->format('Y') => $fy2Amount];
+
+        return [
+            (int) $fy1Start->format('Y') => $fy1Amount,
+            (int) $fy2Start->format('Y') => $fy2Amount,
+        ];
     }
 
-    private function calculateMarginalRelief(float $taxable, float $augmented, float $grossTax, array $augAllocated): float
-    {
-        // Early return if marginal relief is not applicable
-        if ($this->ringFenceProfitsIncluded == 0 && strtotime($this->periodTo) > strtotime('2023-03-31')) {
+    /**
+     * Calculate marginal relief per s18-21 CTA 2010.
+     *
+     * Replaces the old implementation which incorrectly returned 0 for every
+     * post-April 2023 non-ring-fence return with the logic from the Livewire
+     * computation-preview component (applyMarginalRelief).
+     *
+     * Key compliance points (matching file 1):
+     *  - The new tiered / marginal-relief system applies to accounting periods
+     *    ending ON OR AFTER 1 April 2023 (s18 CTA 2010 as amended FA 2021).
+     *  - For periods straddling 1 April 2023, only the POST-April 2023 profit
+     *    slice is subject to the new thresholds. The pre-April 2023 slice is
+     *    taxed at flat 19% and cannot generate marginal relief.
+     *  - Thresholds are divided by (1 + associated companies) [s18(4) CTA 2010]
+     *    and time-apportioned to the post-April 2023 days [s18(3) CTA 2010].
+     *  - Relief formula (s19(3) CTA 2010):
+     *      (Upper − Augmented) × (Profits / Augmented) × (3 / 200)
+     *  - Ring-fence trades use a separate mechanism; for non-ring-fence companies
+     *    in pre-2023 periods no marginal relief exists.
+     *
+     * @param float $taxable      Chargeable profits for the whole period.
+     * @param float $augmented    Augmented profits (chargeable + exempt ABGH distributions).
+     * @param float $grossTax     Gross tax before relief (unused, retained for signature compat).
+     * @param array $augAllocated Per-FY augmented profit split (unused, retained for compat).
+     */
+    private function calculateMarginalRelief(
+        float $taxable,
+        float $augmented,
+        float $grossTax,      // kept for call-site compatibility
+        array $augAllocated   // kept for call-site compatibility
+    ): float {
+        if ($taxable <= 0 || $augmented <= 0) {
             return 0.0;
         }
 
-        $assoc = max(1, ($this->associatedCompanies ?? 0) + 1);
-        $periodDays = (new \DateTimeImmutable($this->periodTo))->diff(new \DateTimeImmutable($this->periodFrom))->days + 1;
-        $lower = $this->mrLowerLimit * ($periodDays / 365) / $assoc;
-        $upper = $this->mrUpperLimit * ($periodDays / 365) / $assoc;
+        $from      = new \DateTimeImmutable($this->periodFrom);
+        $to        = new \DateTimeImmutable($this->periodTo);
+        $totalDays = $to->diff($from)->days + 1;
 
-        // Use default fraction (3/200) if denominator is zero or invalid
-        $fraction = $this->mrFractionDenominator != 0.0
+        $april2023 = new \DateTimeImmutable('2023-04-01');
+
+        // ---- Determine how many days fall in the post-April 2023 regime ------
+
+        if ($to < $april2023) {
+            // Period is entirely pre-April 2023.
+            // Ring-fence marginal relief (if applicable) is handled separately;
+            // for standard companies there is no marginal relief in this regime.
+            return 0.0;
+        }
+
+        if ($from >= $april2023) {
+            // Period is entirely post-April 2023.
+            $postDays = $totalDays;
+        } else {
+            // Period straddles the 1 April 2023 boundary.
+            // Pre-2023 days run from $from up to (but not including) 1 Apr 2023.
+            $preDays  = $april2023->diff($from)->days;   // days before 1 Apr 2023
+            $postDays = $totalDays - $preDays;
+        }
+
+        if ($postDays <= 0) {
+            return 0.0;
+        }
+
+        // ---- Post-April 2023 profit slice (s18 CTA 2010) ---------------------
+        $postProfit    = ($postDays / $totalDays) * $taxable;
+        $postAugmented = ($postDays / $totalDays) * $augmented;
+
+        // ---- Time-apportioned thresholds (s18(3) & s18(4) CTA 2010) ---------
+        $assoc      = max(0, (int) ($this->associatedCompanies ?? 0));
+        $divisor    = $assoc + 1;
+        $lowerLimit = ($this->mrLowerLimit  / $divisor) * ($postDays / 365);
+        $upperLimit = ($this->mrUpperLimit  / $divisor) * ($postDays / 365);
+
+        // ---- Band check (mirrors applyMarginalRelief in the Livewire component)
+        if ($postAugmented <= $lowerLimit || $postAugmented >= $upperLimit) {
+            // Small profits rate (≤ lower) or main rate (≥ upper): no marginal relief.
+            return 0.0;
+        }
+
+        // ---- s19(3) CTA 2010 formula -----------------------------------------
+        $fraction = ($this->mrFractionDenominator != 0.0)
             ? $this->mrFractionNumerator / $this->mrFractionDenominator
             : 3.0 / 200.0;
 
-        if ($augmented <= $lower) {
-            return 0.0; // Below lower limit, no marginal relief
-        } elseif ($augmented < $upper) {
-            return ($upper - $augmented) * $fraction * ($taxable / max($augmented, 0.01)); // Avoid division by zero
-        } else {
-            return 0.0; // Above upper limit, no marginal relief
-        }
+        $marginalRelief = ($upperLimit - $postAugmented)
+            * ($postProfit / max($postAugmented, 0.01))
+            * $fraction;
+
+        return round(max(0.0, $marginalRelief), 2);
     }
 
 
     /**
      * Adds a valid IRmark to the given package.
-     *
-     * This function over-rides the packageDigest() function provided in the main
-     * php-govtalk class.
-     *
-     * @param string $package The package to add the IRmark to.
-     *
-     * @return string The new package after addition of the IRmark.
      */
     protected function packageDigest($package)
     {
         $packageSimpleXML  = simplexml_load_string($package);
         $packageNamespaces = $packageSimpleXML->getNamespaces();
-
-        $body = $packageSimpleXML->xpath('GovTalkMessage/Body');
 
         preg_match('#<Body>(.*)<\/Body>#su', $packageSimpleXML->asXML(), $matches);
         $packageBody = $matches[1];
@@ -3206,14 +3118,7 @@ class CT600 extends GovTalk
     }
 
     /**
-     * Generates an IRmark hash from the given XML string for use in the IRmark
-     * node inside the message body.  The string passed must contain one IRmark
-     * element containing the string IRmark (ie. <IRmark>IRmark+Token</IRmark>) or the
-     * function will fail.
-     *
-     * @param $xmlString string The XML to generate the IRmark hash from.
-     *
-     * @return string The IRmark hash.
+     * Generates an IRmark hash from the given XML string.
      */
     private function generateIRMark($xmlString, $namespaces = null)
     {
@@ -3251,14 +3156,13 @@ class CT600 extends GovTalk
             return false;
         }
     }
+
     private function deterministicGzip(string $data): string
     {
-        $gzHeader = "\x1f\x8b" . "\x08" . "\x00" . "\x00\x00\x00\x00" . "\x00" . "\x03"; // mtime=0 OS=Unix
-        $deflated = gzdeflate($data, 9);
-        $crc = pack('V', crc32($data));
-        $isize = pack('V', strlen($data) & 0xFFFFFFFF);
+        $gzHeader = "\x1f\x8b" . "\x08" . "\x00" . "\x00\x00\x00\x00" . "\x00" . "\x03";
+        $deflated  = gzdeflate($data, 9);
+        $crc       = pack('V', crc32($data));
+        $isize     = pack('V', strlen($data) & 0xFFFFFFFF);
         return $gzHeader . $deflated . $crc . $isize;
     }
-
-   
 }
