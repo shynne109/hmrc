@@ -94,4 +94,34 @@ class CarBenefits
     {
         return $this->data;
     }
+
+    /**
+     * Flag this car as withdrawn ("given up") in the current reporting period.
+     *
+     * Per HMRC RTI Data Item Guide: when a company car ceases to be available,
+     * the car must be reported on the FPS for that period with AvailTo set and
+     * Amendment=yes. Failing to do this is a recognition-blocker (HMRC raised
+     * this exact issue against our previous submission - car given up in M12
+     * was not reported in the M12 FPS).
+     *
+     * @param string $availTo End-of-availability date in Y-m-d (must be ≤ tax year end)
+     * @return self for chaining
+     */
+    public function markWithdrawn(string $availTo): self
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $availTo)) {
+            throw new \InvalidArgumentException('markWithdrawn availTo must be Y-m-d format');
+        }
+        $this->data['availTo'] = $availTo;
+        $this->data['amendment'] = true;
+        return $this;
+    }
+
+    /**
+     * Whether this car has been marked as withdrawn in the current period.
+     */
+    public function isWithdrawn(): bool
+    {
+        return !empty($this->data['availTo']);
+    }
 }

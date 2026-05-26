@@ -214,11 +214,28 @@ class FPS extends GovTalk
             if (preg_match('/^(\d{4})-(\d{2})$/', $this->relatedTaxYear, $m)) {
                 $yearSegment = substr($m[1], -2) . '-' . $m[2];
             } else {
-                $yearSegment = '25-26';
+                $yearSegment = $this->calculateCurrentTaxYear();
             }
         }
         $version = '1';
         return 'http://www.govtalk.gov.uk/taxation/PAYE/RTI/FullPaymentSubmission/' . $yearSegment . '/' . $version;
+    }
+
+    /**
+     * Resolve the local path to the FPS XSD for the active tax year.
+     * Schema filename naming convention: FullPaymentSubmission-YYYY-v1-0.xsd
+     * where YYYY is the tax-year-end Gregorian year (e.g. tax year 26-27 → 2027).
+     */
+    private function resolveSchemaPath(): string
+    {
+        $taxYear = $this->relatedTaxYear;
+        if (!preg_match('/^\d{2}-\d{2}$/', $taxYear)) {
+            $taxYear = $this->calculateCurrentTaxYear();
+        }
+        $endYY = (int)substr($taxYear, 3, 2);
+        $endYYYY = 2000 + $endYY;
+        return __DIR__ . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR
+            . 'FullPaymentSubmission-' . $endYYYY . '-v1-0.xsd';
     }
 
     private function buildFpsBodyXml(): string
@@ -356,6 +373,11 @@ class FPS extends GovTalk
         if (($d['offPayrollWorker'] ?? '') == 'yes') {
             $xw->writeElement('OffPayrollWorker', 'yes');
         }
+        // OccPenInd: occupational pension indicator (e.g. pensioner payroll runs).
+        // Must precede DirectorsNIC per XSD sequence.
+        if (!empty($d['occPenInd'])) {
+            $xw->writeElement('OccPenInd', 'yes');
+        }
         // Director NICs method & appointment week should precede Starter per schema ordering
         if (!empty($d['directorsNic']) && in_array($d['directorsNic'], ['AN','AL'], true)) {
             $xw->writeElement('DirectorsNIC', $d['directorsNic']);
@@ -478,7 +500,7 @@ class FPS extends GovTalk
             $xw->writeAttribute('BasisNonCumulative', 'yes');
         }
         
-        if ($d['taxRegime'] ?? '' != '') {
+        if (($d['taxRegime'] ?? '') !== '' && in_array($d['taxRegime'], ['S','C'], true)) {
             $xw->writeAttribute('TaxRegime', $d['taxRegime']);
         }
         $xw->text($d['taxCode']);
@@ -606,21 +628,23 @@ class FPS extends GovTalk
         }
         $xw->endElement(); // Payment
 
-        // NI letters & values (single letter support)
+        // NI letters & values (single letter support).
+        // Block is optional, but Employee::validate() enforces all required children are
+        // present when niLetter is set, so we can safely require them here too.
         if (!empty($d['niLetter'])) {
             $xw->startElement('NIlettersAndValues');
             $xw->writeElement('NIletter', $d['niLetter']);
-            $xw->writeElement('GrossEarningsForNICsInPd', number_format($d['niGross'] ?? 0, 2, '.', ''));
-            $xw->writeElement('GrossEarningsForNICsYTD', number_format($d['ytdNiGross'] ?? ($d['niGross'] ?? 0), 2, '.', ''));
-            $xw->writeElement('AtLELYTD', number_format($d['atLELYTD'] ?? 0, 2, '.', ''));
-            $xw->writeElement('LELtoPTYTD', number_format($d['lelToPTYTD'] ?? 0, 2, '.', ''));
-            $xw->writeElement('PTtoUELYTD', number_format($d['ptToUELYTD'] ?? 0, 2, '.', ''));
-            $periodEmpNIC = ($d['niEe'] ?? 0) + ($d['niEr'] ?? 0);
+            $xw->writeElement('GrossEarningsForNICsInPd', number_format((float)$d['niGross'], 2, '.', ''));
+            $xw->writeElement('GrossEarningsForNICsYTD', number_format((float)$d['ytdNiGross'], 2, '.', ''));
+            $xw->writeElement('AtLELYTD', number_format((float)$d['atLELYTD'], 2, '.', ''));
+            $xw->writeElement('LELtoPTYTD', number_format((float)$d['lelToPTYTD'], 2, '.', ''));
+            $xw->writeElement('PTtoUELYTD', number_format((float)$d['ptToUELYTD'], 2, '.', ''));
+            $periodEmpNIC = (float)$d['niEe'] + (float)$d['niEr'];
             $xw->writeElement('TotalEmpNICInPd', number_format($periodEmpNIC, 2, '.', ''));
-            $ytdEmpNIC = ($d['ytdNiEe'] ?? 0) + ($d['ytdNiEr'] ?? 0);
+            $ytdEmpNIC = (float)$d['ytdNiEe'] + (float)$d['ytdNiEr'];
             $xw->writeElement('TotalEmpNICYTD', number_format($ytdEmpNIC, 2, '.', ''));
-            $xw->writeElement('EmpeeContribnsInPd', number_format($d['niEe'] ?? 0, 2, '.', ''));
-            $xw->writeElement('EmpeeContribnsYTD', number_format($d['ytdNiEe'] ?? ($d['niEe'] ?? 0), 2, '.', ''));
+            $xw->writeElement('EmpeeContribnsInPd', number_format((float)$d['niEe'], 2, '.', ''));
+            $xw->writeElement('EmpeeContribnsYTD', number_format((float)$d['ytdNiEe'], 2, '.', ''));
             $xw->endElement();
         }
         $xw->endElement(); // Employment
@@ -658,9 +682,9 @@ class FPS extends GovTalk
             $body = preg_replace('#</FullPaymentSubmission>#', '<FinalSubmission><ForYear>yes</ForYear></FinalSubmission></FullPaymentSubmission>', $body, 1);
         }
         if ($this->validateSchema) {
-            $schema = __DIR__ . DIRECTORY_SEPARATOR . 'FullPaymentSubmission-2026-v1-0.xsd';
+            $schema = $this->resolveSchemaPath();
             if (!$this->setMessageBody($body, $schema)) {
-                throw new \RuntimeException('FPS XML failed schema validation');
+                throw new \RuntimeException('FPS XML failed schema validation against ' . $schema);
             }
         } else {
             $this->setMessageBody($body);

@@ -129,7 +129,7 @@ class EPS extends GovTalk
         $this->testMode = $testMode;
         $this->customTestEndpoint = $customTestEndpoint;
         $this->employer = $employer;
-        $this->relatedTaxYear = date('y') . '-' . sprintf('%02d', (int)date('y') + 1); // naive default
+        $this->relatedTaxYear = $this->calculateCurrentTaxYear();
         $endpoint = $this->resolveEndpoint();
 
         parent::__construct($endpoint, $senderId, $password);
@@ -454,11 +454,36 @@ class EPS extends GovTalk
             if (preg_match('/^(\d{4})-(\d{2})$/', $this->relatedTaxYear, $m)) {
                 $yearSegment = substr($m[1], -2) . '-' . $m[2];
             } else {
-                $yearSegment = '25-26';
+                $yearSegment = $this->calculateCurrentTaxYear();
             }
         }
         $version = '1';
         return 'http://www.govtalk.gov.uk/taxation/PAYE/RTI/EmployerPaymentSummary/' . $yearSegment . '/' . $version;
+    }
+
+    /**
+     * Calculate the current HMRC tax year.
+     * UK tax year runs from April 6th to April 5th of the following year.
+     * For example: April 6, 2026 to April 5, 2027 = tax year "26-27".
+     *
+     * @return string Tax year in format 'YY-YY' (e.g., '26-27')
+     */
+    private function calculateCurrentTaxYear(): string
+    {
+        $now = new \DateTime();
+        $year = (int) $now->format('Y');
+        $month = (int) $now->format('n');
+        $day = (int) $now->format('j');
+
+        if ($month < 4 || ($month === 4 && $day < 6)) {
+            $startYear = $year - 1;
+        } else {
+            $startYear = $year;
+        }
+
+        $endYear = $startYear + 1;
+
+        return sprintf('%02d-%02d', $startYear % 100, $endYear % 100);
     }
 
     public function submit(): array|false

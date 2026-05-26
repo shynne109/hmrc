@@ -31,6 +31,7 @@ namespace HMRC\PAYE;
  *  leavingDate (Y-m-d)       -> Employment/LeavingDate
  *  paymentAfterLeaving (bool)-> Payment/PmtAfterLeaving
  *  offPayrollWorker (bool)   -> Employment/OffPayrollWorker
+ *  occPenInd (bool)          -> Employment/OccPenInd (occupational pension indicator, for pensioner payrolls)
  *  irregularPayment (bool)   -> Employment/IrrEmp
  *
  * Payment period (Payment element):
@@ -40,9 +41,21 @@ namespace HMRC\PAYE;
  *  periodsCovered (int >=1 default 1)        -> Payment/PeriodsCovered
  *  hoursWorked (A..E)                        -> Payment/HoursWorked
  *  taxCode (string)                          -> Payment/TaxCode (with optional taxCodeBasisNonCumulative bool, taxRegime S|C)
- *  taxablePay (float)                        -> Payment/TaxablePay
+ *  taxablePay (float)                        -> Payment/TaxablePay (regular taxable pay + any taxable excess of termination award)
+ *  nonTaxOrNICPmt (float)                    -> Payment/NonTaxOrNICPmt (e.g. s401 ITEPA 2003 termination-award exempt portion, up to £30,000)
+ *  dednsFromNetPay (float)                   -> Payment/DednsFromNetPay
+ *  payAfterStatDedns (float)                 -> Payment/PayAfterStatDedns
+ *  benefitsTaxedViaPayroll (float)           -> Payment/BenefitsTaxedViaPayroll (period amount of payrolled benefits)
+ *  class1ANICsYTD (float)                    -> Payment/Class1ANICsYTD (YTD Class 1A on payrolled benefits)
  *  taxDeducted (float)                       -> Payment/TaxDeductedOrRefunded
  *  lateReason (A..H)                         -> Payment/LateReason
+ *
+ * Termination awards (s401 ITEPA 2003):
+ *  First £30,000 of a qualifying termination award is exempt from PAYE/NIC.
+ *  Place the exempt slice in `nonTaxOrNICPmt`; place the taxable excess in `taxablePay`
+ *  (added to regular pay for that period). Both the exempt and taxable portions must
+ *  also be reflected in YTD figures. Use `addTerminationAward(float $totalAward, float $regularPay)`
+ *  to compute and merge the values into the existing details.
  *
  * FiguresToDate (YTD):
  *  ytdTaxablePay (float) -> FiguresToDate/TaxablePay
@@ -57,18 +70,35 @@ namespace HMRC\PAYE;
  *  smpYTD, sppYTD, sapYTD, shPPYTD, spbPYTD, sncPYTD (float) -> Payment/*YTD
  *
  * Loans & deductions (Payment element):
- *  studentLoanRecovered (float .00) + studentLoanPlan (01|02|04) -> Payment/StudentLoanRecovered(@PlanType)
+ *  studentLoanRecovered (float .00) + studentLoanPlan (01|02|04|05) -> Payment/StudentLoanRecovered(@PlanType)
  *  postgradLoanRecovered (float .00) -> Payment/PostgradLoanRecovered
  *
  * National Insurance (NIlettersAndValues - supports one letter for now):
  *  niLetter -> NIlettersAndValues/NIletter
  *  niGross (period) -> GrossEarningsForNICsInPd
  *  ytdNiGross -> GrossEarningsForNICsYTD
- *  atLELYTD, lelToPTYTD, ptToUELYTD (threshold splits) (optional, default 0)
+ *  atLELYTD, lelToPTYTD, ptToUELYTD (YTD threshold band splits — all REQUIRED when NI block emitted)
  *  niEe (period EE NIC) -> EmpeeContribnsInPd
  *  ytdNiEe -> EmpeeContribnsYTD
  *  niEr (period ER NIC) -> used to approximate TotalEmpNICInPd (niEe+niEr)
  *  ytdNiEr -> used for TotalEmpNICYTD (ytdNiEe+ytdNiEr)
+ *
+ *  IMPORTANT: NIlettersAndValues is all-or-nothing.
+ *  - Per XSD the block itself is optional (minOccurs=0), but ALL ten children are mandatory.
+ *  - If the employee has no NICable earnings in the tax year, do NOT set `niLetter` -
+ *    the block will be omitted entirely.
+ *  - If `niLetter` is set, all band/contribution fields must reflect the actual computed
+ *    values. Silent zero defaults can mislead HMRC into rejecting the submission as
+ *    "monetary elements supplied but zero-filled" (see Mar-2026 rejection feedback).
+ *
+ * Zero-fill policy for optional period monetary fields
+ * (nonTaxOrNICPmt, dednsFromNetPay, payAfterStatDedns, benefitsTaxedViaPayroll,
+ * class1ANICsYTD, smpYTD, sppYTD, etc.):
+ *  - Do not set the key at all when there is no economic event in the period.
+ *    Setting to 0.00 will emit `<X>0.00</X>` which HMRC flags as inappropriate.
+ *  - Only set when the value is genuine and non-zero (or genuinely zero with a reason
+ *    to report it, e.g. FlexibleDrawdown/NontaxablePayment of 0.00 alongside a non-zero
+ *    TaxablePayment, where the data item guide explicitly requires both).
  *
  * Validation enforces required items per schema essentials.
  */
@@ -102,6 +132,38 @@ class Employee
     public function getCarBenefits(): array
     {
         return $this->carBenefits;
+    }
+
+    /**
+     * Apply a termination award (s401 ITEPA 2003) to the period figures.
+     *
+     * The first £30,000 of a qualifying termination award is exempt from PAYE and
+     * Class 1 NIC. Any excess is fully taxable through PAYE but remains NIC-free.
+     *
+     * This helper:
+     *  - Adds the exempt portion (up to £30k) to `nonTaxOrNICPmt`.
+     *  - Adds the taxable excess to `taxablePay` (period) and `ytdTaxablePay` (cumulative).
+     *  - Leaves NIC fields untouched (correct: termination awards don't attract Class 1 NIC).
+     *
+     * Caller is responsible for: recomputing TotalTax/TaxDeductedOrRefunded for the
+     * taxable excess, and for any Class 1A NIC reporting on EXB if relevant.
+     *
+     * @param float $totalAward Gross termination award (≥ 0)
+     * @param float $exemptCap  Default £30,000 per s401 ITEPA 2003 (override for partial-year scenarios)
+     */
+    public function addTerminationAward(float $totalAward, float $exemptCap = 30000.00): void
+    {
+        if ($totalAward <= 0) {
+            return;
+        }
+        $exempt = min($totalAward, $exemptCap);
+        $taxableExcess = max(0.0, $totalAward - $exemptCap);
+
+        $this->details['nonTaxOrNICPmt'] = ($this->details['nonTaxOrNICPmt'] ?? 0.0) + $exempt;
+        if ($taxableExcess > 0) {
+            $this->details['taxablePay'] = ($this->details['taxablePay'] ?? 0.0) + $taxableExcess;
+            $this->details['ytdTaxablePay'] = ($this->details['ytdTaxablePay'] ?? 0.0) + $taxableExcess;
+        }
     }
 
     /** Basic validation returning array of error strings */
@@ -162,6 +224,17 @@ class Employee
             $pd = $this->details['partnerDetails'];
             if (empty($pd['surname'])) { $e[] = 'partnerDetails.surname missing'; }
             if (!empty($pd['nino']) && !preg_match('/^[A-CEGHJ-PR-TW-Z]{2}[0-9]{6}[A-D]?$/', $pd['nino'])) { $e[] = 'partnerDetails.nino invalid format'; }
+        }
+        // NIlettersAndValues completeness: per XSD, all 10 children are minOccurs=1 when the block exists.
+        // If `niLetter` is set the caller MUST also provide all the band/contribution fields explicitly,
+        // otherwise we'd silently zero-fill (HMRC rejection trigger).
+        if (!empty($this->details['niLetter'])) {
+            $requiredNiFields = ['niGross','ytdNiGross','atLELYTD','lelToPTYTD','ptToUELYTD','niEe','ytdNiEe','niEr','ytdNiEr'];
+            foreach ($requiredNiFields as $f) {
+                if (!array_key_exists($f, $this->details)) {
+                    $e[] = "niLetter is set but $f is missing (NIlettersAndValues children are all mandatory; do not rely on silent zero defaults)";
+                }
+            }
         }
         return $e;
     }

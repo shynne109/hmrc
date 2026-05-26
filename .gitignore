@@ -2,9 +2,11 @@
 /docs
 /.claude
 examples/recognition_output
-src/PAYE/P11D/P11D Valid Samples -2025
-src/PAYE/P11D/P11D Valid-Samples-2026
-src/PAYE/P11D/Scenarios
+/src/PAYE/P11D/P11D Valid Samples -2025
+/src/PAYE/P11D/P11D Valid-Samples-2026
+/src/PAYE/P11D/Scenarios
+/src/PAYE/scenarios
+src/PAYE/resources
 src/PAYE/P11D/docs
 composer.lock
 composer.phar

@@ -33,8 +33,14 @@ class FPSTest extends TestCase
             'ytdTax' => 1200.00,
             'niLetter' => 'A',
             'niGross' => 2500.00,
+            'ytdNiGross' => 10000.00,
+            'atLELYTD' => 542.00,
+            'lelToPTYTD' => 504.00,
+            'ptToUELYTD' => 8954.00,
             'niEe' => 200.00,
+            'ytdNiEe' => 800.00,
             'niEr' => 220.00,
+            'ytdNiEr' => 880.00,
         ], $overrides);
         return new Employee($data);
     }

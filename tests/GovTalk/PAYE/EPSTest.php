@@ -70,10 +70,13 @@ class EPSTest extends TestCase
     public function testEpsPeriodsAndRecoverables(): void
     {
     $this->setMockHttpResponseFile('eps_ack.xml');
-        $eps = new EPS('SENDERID', 'password', $this->buildEmployer(), true, null);
+        // CIS deductions require a UTR per BVR 7953
+        $employerWithUtr = new ReportingCompany('123', 'AB456', '123PA00123456', '1234567890');
+        $eps = new EPS('SENDERID', 'password', $employerWithUtr, true, null);
         $eps->setLogger(new \Psr\Log\NullLogger());
     $eps->enableSchemaValidation(true);
         $this->injectMockClient($eps);
+        $eps->setNoPaymentForPeriod(true); // NoPaymentDates is paired with NoPaymentForPeriod per schema
         $eps->setNoPaymentDates('2025-05-01','2025-05-31');
         $eps->setPeriodOfInactivity('2025-07-01','2025-07-31');
         $eps->setRecoverableAmountsYTD(['TaxMonth'=>2,'CISDeductionsSuffered'=>'123.45']);
