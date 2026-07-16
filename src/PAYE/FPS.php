@@ -639,10 +639,11 @@ class FPS extends GovTalk
             $xw->writeElement('AtLELYTD', number_format((float)$d['atLELYTD'], 2, '.', ''));
             $xw->writeElement('LELtoPTYTD', number_format((float)$d['lelToPTYTD'], 2, '.', ''));
             $xw->writeElement('PTtoUELYTD', number_format((float)$d['ptToUELYTD'], 2, '.', ''));
-            $periodEmpNIC = (float)$d['niEe'] + (float)$d['niEr'];
-            $xw->writeElement('TotalEmpNICInPd', number_format($periodEmpNIC, 2, '.', ''));
-            $ytdEmpNIC = (float)$d['ytdNiEe'] + (float)$d['ytdNiEr'];
-            $xw->writeElement('TotalEmpNICYTD', number_format($ytdEmpNIC, 2, '.', ''));
+            // Data items 86A/86Aa: "Total of EMPLOYER NI Contributions" — employer-only.
+            // Employee contributions are reported separately in EmpeeContribns* (86B/86Ba);
+            // they must never be added into the TotalEmpNIC* fields.
+            $xw->writeElement('TotalEmpNICInPd', number_format((float)$d['niEr'], 2, '.', ''));
+            $xw->writeElement('TotalEmpNICYTD', number_format((float)$d['ytdNiEr'], 2, '.', ''));
             $xw->writeElement('EmpeeContribnsInPd', number_format((float)$d['niEe'], 2, '.', ''));
             $xw->writeElement('EmpeeContribnsYTD', number_format((float)$d['ytdNiEe'], 2, '.', ''));
             $xw->endElement();

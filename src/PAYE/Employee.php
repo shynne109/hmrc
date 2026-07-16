@@ -80,8 +80,8 @@ namespace HMRC\PAYE;
  *  atLELYTD, lelToPTYTD, ptToUELYTD (YTD threshold band splits — all REQUIRED when NI block emitted)
  *  niEe (period EE NIC) -> EmpeeContribnsInPd
  *  ytdNiEe -> EmpeeContribnsYTD
- *  niEr (period ER NIC) -> used to approximate TotalEmpNICInPd (niEe+niEr)
- *  ytdNiEr -> used for TotalEmpNICYTD (ytdNiEe+ytdNiEr)
+ *  niEr (period ER NIC) -> TotalEmpNICInPd (data item 86A — EMPLOYER contributions only)
+ *  ytdNiEr -> TotalEmpNICYTD (data item 86Aa — EMPLOYER contributions only)
  *
  *  IMPORTANT: NIlettersAndValues is all-or-nothing.
  *  - Per XSD the block itself is optional (minOccurs=0), but ALL ten children are mandatory.
