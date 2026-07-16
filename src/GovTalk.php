@@ -1860,6 +1860,14 @@ class GovTalk implements LoggerAwareInterface
 
         $this->generateTransactionId();
 
+        // SUBMISSION_POLL (DSP §3.4.3) and DELETE_REQUEST (DSP §3.7.3) must carry
+        // a MINIMAL header: SenderDetails empty (credentials must not be repeated —
+        // the CorrelationID identifies the conversation), no Keys, no TargetDetails,
+        // no ChannelRouting. DATA_REQUEST is NOT minimal — DSP §3.9.2 requires the
+        // same credentials as the original submission.
+        $isMinimalHeaderMessage = $this->messageQualifier === 'poll'
+            || ($this->messageQualifier === 'request' && $this->messageFunction === 'delete');
+
         // Create the XML document (in memory)...
         $package = new XMLWriter();
         $package->openMemory();
@@ -1910,45 +1918,72 @@ class GovTalk implements LoggerAwareInterface
         $package->endElement(); # MessageDetails
 
         // Sender details...
-        $package->startElement('SenderDetails');
+        if ($isMinimalHeaderMessage) {
+            // Empty element per the DSP samples (§3.4.4 / §3.7.4).
+            $package->writeElement('SenderDetails', '');
+        } else {
+            $package->startElement('SenderDetails');
 
-        // Authentication...
-        $package->startElement('IDAuthentication');
-        $package->writeElement('SenderID', $this->govTalkSenderId);
-        $package->startElement('Authentication');
-        switch ($this->messageAuthType) {
-            case 'alternative':
-                if ($authenticationArray = $this->generateAlternativeAuthentication($this->transactionId)) {
-                    $package->writeElement('Method', $authenticationArray['method']);
+            // Authentication...
+            $package->startElement('IDAuthentication');
+            $package->writeElement('SenderID', $this->govTalkSenderId);
+            $package->startElement('Authentication');
+            switch ($this->messageAuthType) {
+                case 'alternative':
+                    if ($authenticationArray = $this->generateAlternativeAuthentication($this->transactionId)) {
+                        $package->writeElement('Method', $authenticationArray['method']);
+                        $package->writeElement('Role', 'principal');
+                        $package->writeElement('Value', $authenticationArray['token']);
+                    } else {
+                        return false;
+                    }
+                    break;
+                case 'clear':
+                    $package->writeElement('Method', 'clear');
                     $package->writeElement('Role', 'principal');
-                    $package->writeElement('Value', $authenticationArray['token']);
-                } else {
-                    return false;
-                }
-                break;
-            case 'clear':
-                $package->writeElement('Method', 'clear');
-                $package->writeElement('Role', 'principal');
-                $package->writeElement('Value', $this->govTalkPassword);
-                break;
-            case 'MD5':
-                $package->writeElement('Method', 'MD5');
-                $package->writeElement('Value', base64_encode(md5(strtolower($this->govTalkPassword), true)));
-                break;
-        }
-        $package->endElement(); # Authentication
+                    $package->writeElement('Value', $this->govTalkPassword);
+                    break;
+                case 'MD5':
+                    $package->writeElement('Method', 'MD5');
+                    $package->writeElement('Value', base64_encode(md5(strtolower($this->govTalkPassword), true)));
+                    break;
+            }
+            $package->endElement(); # Authentication
 
-        $package->endElement(); # IDAuthentication
-        if ($this->senderEmailAddress !== null) {
-            $package->writeElement('EmailAddress', $this->senderEmailAddress);
-        }
+            $package->endElement(); # IDAuthentication
+            if ($this->senderEmailAddress !== null) {
+                $package->writeElement('EmailAddress', $this->senderEmailAddress);
+            }
 
-        $package->endElement(); # SenderDetails
+            $package->endElement(); # SenderDetails
+        }
 
         $package->endElement(); # Header
 
         // GovTalk details...
         $package->startElement('GovTalkDetails');
+
+        if ($isMinimalHeaderMessage) {
+            // §3.4.4 / §3.7.4 samples: GovTalkDetails carries only an empty <Keys/>;
+            // no TargetDetails or ChannelRouting on poll/delete messages.
+            $package->writeElement('Keys', '');
+            $package->endElement(); # GovTalkDetails
+
+            // Body...
+            $package->startElement('Body');
+            if (is_string($this->messageBody)) {
+                $package->writeRaw("\n".trim($this->messageBody)."\n");
+            } elseif ($this->messageBody instanceof \XMLWriter) {
+                $package->writeRaw("\n".trim($this->messageBody->outputMemory())."\n");
+            }
+            $package->endElement(); # Body
+
+            $package->endElement(); # GovTalkMessage
+
+            $xmlPackage = $this->packageDigest($package->flush());
+
+            return $xmlPackage;
+        }
 
         // Keys...
         if (count($this->govTalkKeys) > 0) {
